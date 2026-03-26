@@ -1,0 +1,49 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ develop-20260326, main ]
+  pull_request:
+    branches: [ develop-20260326, main ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up JDK 17
+      uses: actions/setup-java@v4
+      with:
+        java-version: '17'
+        distribution: 'temurin'
+        cache: maven
+
+    - name: Build with Maven
+      run: mvn clean package -DskipTests
+
+    - name: Run tests
+      run: mvn test
+
+    - name: Upload test results
+      uses: actions/upload-artifact@v4
+      with:
+        name: test-results
+        path: '*/target/surefire-reports'
+      if: always()
+
+    - name: Build Docker images (optional)
+      run: |
+        # Add Docker build steps here if needed
+      if: github.ref == 'refs/heads/main'
+
+    - name: Deploy to staging (optional)
+      run: |
+        # Add deployment steps here if needed
+      if: github.ref == 'refs/heads/develop-20260326'
+
+    - name: Deploy to production (optional)
+      run: |
+        # Add deployment steps here if needed
+      if: github.ref == 'refs/heads/main'
