@@ -1,0 +1,29 @@
+server:
+  port: 8761
+
+spring:
+  application:
+    name: ai-hr-eureka-server
+
+# Eureka 服务器配置
+eureka:
+  instance:
+    hostname: localhost
+  client:
+    # 不要向自己注册
+    register-with-eureka: false
+    # 不要从自己获取注册信息
+    fetch-registry: false
+    service-url:
+      defaultZone: http://${eureka.instance.hostname}:${server.port}/eureka/
+  server:
+    # 关闭自我保护模式
+    enable-self-preservation: false
+    # 清理无效节点的时间间隔
+    eviction-interval-timer-in-ms: 60000
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus

@@ -1,0 +1,66 @@
+spring:
+  data:
+    redis:
+      host: ${AIHR_REDIS_HOST:localhost}
+      port: ${AIHR_REDIS_PORT:6379}
+  ai:
+    dashscope:
+      api-key: ${AIHR_DASHSCOPE_API_KEY:}
+      chat:
+        enabled: true
+        model: qwen3.5-plus
+      rerank:
+        enabled: false
+        model: gte-rerank
+      agent:
+        enabled: true
+        model: qwen2.5-omni-7b
+    model:
+      audio:
+        transcription: none
+  datasource:
+    url: jdbc:mysql://${AIHR_MYSQL_HOST:localhost}:${AIHR_MYSQL_PORT:3306}/ai_hr_aicore?useUnicode=true&characterEncoding=utf8&useSSL=false&allowPublicKeyRetrieval=true&createDatabaseIfNotExist=true
+    username: ${AIHR_MYSQL_USER:root}
+    password: ${AIHR_MYSQL_PASSWORD:root}
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+  flyway:
+    enabled: true
+  zipkin:
+    base-url: http://localhost:9411
+  sleuth:
+    sampler:
+      probability: 1.0
+
+eureka:
+  client:
+    service-url:
+      defaultZone: http://localhost:8761/eureka/
+  instance:
+    prefer-ip-address: true
+
+aihr:
+  milvus:
+    host: ${AIHR_MILVUS_HOST:localhost}
+    port: ${AIHR_MILVUS_PORT:19530}
+    database: ${AIHR_MILVUS_DATABASE:default}
+    collection: ${AIHR_MILVUS_COLLECTION:ai_hr_policy_chunks}
+  services:
+    attendance-base-url: http://ai-hr-attendance
+    salary-base-url: http://ai-hr-salary
+  toolinvoker:
+    max-attempts: 3
+    timeout-ms: 5000
+    initial-backoff-ms: 100
+  security:
+    jwt:
+      issuer: ${AIHR_JWT_ISSUER:ai-hr-auth}
+      secret: ${AIHR_JWT_SECRET:DefaultJWTSecretKey1234567890ABCDEFGHIJKLMNOPQRSTUVWXYZ}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus

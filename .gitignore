@@ -1,0 +1,82 @@
+# IDE files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Build files
+target/
+*.jar
+*.war
+*.ear
+
+# Maven files
+.mvn/
+maven-wrapper.jar
+
+# Gradle files
+gradle/
+gradlew
+gradlew.bat
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Log files
+logs/
+*.log
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Test files
+**/test-results/
+**/surefire-reports/
+**/failsafe-reports/
+
+# Coverage files
+**/jacoco/
+**/coverage/
+
+# Temporary files
+tmp/
+temp/
+
+# IDE specific files
+*.iml
+*.ipr
+*.iws
+
+# MacOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Windows
+Thumbs.db
+ehthumbs.db
+ehthumbs_vista.db
+
+# Linux
+*~
+
+# Package manager
+node_modules/
+.npm/
+.yarn/
+.pnp.*
+.yarn-integrity
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?

@@ -1,0 +1,64 @@
+package com.example.aihr.attendance.domain;
+
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.Id;
+import jakarta.persistence.Table;
+import java.time.Instant;
+import java.time.LocalDate;
+
+@Entity
+@Table(name = "attendance_rule_set")
+public class AttendanceRuleSetEntity {
+    @Id
+    private String id;
+
+    @Column(name = "tenant_id", nullable = false)
+    private String tenantId;
+
+    @Column(name = "name", nullable = false)
+    private String name;
+
+    @Column(name = "version", nullable = false)
+    private String version;
+
+    @Column(name = "effective_from", nullable = false)
+    private LocalDate effectiveFrom;
+
+    @Column(name = "effective_to")
+    private LocalDate effectiveTo;
+
+    @Column(name = "status", nullable = false)
+    private String status;
+
+    @Column(name = "rule_json", nullable = false, columnDefinition = "json")
+    private String ruleJson;
+
+    @Column(name = "created_at", nullable = false)
+    private Instant createdAt;
+
+    @Column(name = "created_by")
+    private String createdBy;
+
+    public String getId() { return id; }
+    public void setId(String id) { this.id = id; }
+    public String getTenantId() { return tenantId; }
+    public void setTenantId(String tenantId) { this.tenantId = tenantId; }
+    public String getName() { return name; }
+    public void setName(String name) { this.name = name; }
+    public String getVersion() { return version; }
+    public void setVersion(String version) { this.version = version; }
+    public LocalDate getEffectiveFrom() { return effectiveFrom; }
+    public void setEffectiveFrom(LocalDate effectiveFrom) { this.effectiveFrom = effectiveFrom; }
+    public LocalDate getEffectiveTo() { return effectiveTo; }
+    public void setEffectiveTo(LocalDate effectiveTo) { this.effectiveTo = effectiveTo; }
+    public String getStatus() { return status; }
+    public void setStatus(String status) { this.status = status; }
+    public String getRuleJson() { return ruleJson; }
+    public void setRuleJson(String ruleJson) { this.ruleJson = ruleJson; }
+    public Instant getCreatedAt() { return createdAt; }
+    public void setCreatedAt(Instant createdAt) { this.createdAt = createdAt; }
+    public String getCreatedBy() { return createdBy; }
+    public void setCreatedBy(String createdBy) { this.createdBy = createdBy; }
+}
+

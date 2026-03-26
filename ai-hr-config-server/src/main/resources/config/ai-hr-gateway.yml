@@ -1,0 +1,47 @@
+spring:
+  cloud:
+    gateway:
+      httpclient:
+        connect-timeout: 2000
+        response-timeout: 10s
+      routes:
+        - id: auth
+          uri: lb://ai-hr-auth
+          predicates:
+            - Path=/v1/auth/**
+        - id: attendance
+          uri: lb://ai-hr-attendance
+          predicates:
+            - Path=/v1/attendance/**
+        - id: salary
+          uri: lb://ai-hr-salary
+          predicates:
+            - Path=/v1/salary/**
+        - id: ai-core
+          uri: lb://ai-hr-ai-core
+          predicates:
+            - Path=/v1/ai/**
+  zipkin:
+    base-url: http://localhost:9411
+  sleuth:
+    sampler:
+      probability: 1.0
+
+eureka:
+  client:
+    service-url:
+      defaultZone: http://localhost:8761/eureka/
+  instance:
+    prefer-ip-address: true
+
+aihr:
+  security:
+    jwt:
+      issuer: ${AIHR_JWT_ISSUER:ai-hr-auth}
+      secret: ${AIHR_JWT_SECRET:DefaultJWTSecretKey1234567890ABCDEFGHIJKLMNOPQRSTUVWXYZ}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus

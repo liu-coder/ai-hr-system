@@ -1,0 +1,644 @@
+文件夹 PATH 列表
+卷序列号为 981F-6FCA
+E:.
+|   docker-compose.yml
+|   hs_err_pid32024.log
+|   pom.xml
+|   README.md
+|   remind.md
+|   replay_pid32024.log
+|   run-all.cmd
+|   run-all.ps1
+|   structure.txt
+|   
++---.idea
+|   |   compiler.xml
+|   |   dataSources.local.xml
+|   |   dataSources.xml
+|   |   encodings.xml
+|   |   jarRepositories.xml
+|   |   misc.xml
+|   |   workspace.xml
+|   |   
+|   \---dataSources
++---ai-core
+|   \---src
+|       \---main
+|           \---java
+|               \---com
+|                   \---example
+|                       \---aihr
+|                           \---aicore
+|                               \---web
+|                                       AiController.java
+|                                       
++---ai-hr-ai-core
+|   |   pom.xml
+|   |   
+|   +---src
+|   |   \---main
+|   |       +---java
+|   |       |   \---com
+|   |       |       \---example
+|   |       |           \---aihr
+|   |       |               \---aicore
+|   |       |                   |   AiCoreApplication.java
+|   |       |                   |   
+|   |       |                   +---config
+|   |       |                   |       HttpClientConfig.java
+|   |       |                   |       ServiceEndpointsProperties.java
+|   |       |                   |       
+|   |       |                   +---domain
+|   |       |                   |       AuditEventEntity.java
+|   |       |                   |       ToolCallLogEntity.java
+|   |       |                   |       
+|   |       |                   +---llm
+|   |       |                   |       DashScopeChatService.java
+|   |       |                   |       ToolResultSummarizer.java
+|   |       |                   |       
+|   |       |                   +---milvus
+|   |       |                   |       MilvusConfig.java
+|   |       |                   |       MilvusHealthIndicator.java
+|   |       |                   |       MilvusProperties.java
+|   |       |                   |       
+|   |       |                   +---rag
+|   |       |                   |       EmbeddingService.java
+|   |       |                   |       MilvusVectorStore.java
+|   |       |                   |       PolicyChunkEntity.java
+|   |       |                   |       PolicyChunkRepository.java
+|   |       |                   |       PolicyDocumentEntity.java
+|   |       |                   |       PolicyDocumentRepository.java
+|   |       |                   |       PolicyRagService.java
+|   |       |                   |       VectorStore.java
+|   |       |                   |       
+|   |       |                   +---repo
+|   |       |                   |       AuditEventRepository.java
+|   |       |                   |       ToolCallLogRepository.java
+|   |       |                   |       
+|   |       |                   +---security
+|   |       |                   |       AuthContextFilter.java
+|   |       |                   |       JwtProps.java
+|   |       |                   |       RequestContext.java
+|   |       |                   |       RequestContextHolder.java
+|   |       |                   |       SecurityConfig.java
+|   |       |                   |       
+|   |       |                   +---service
+|   |       |                   |       AuditService.java
+|   |       |                   |       ToolCallLogger.java
+|   |       |                   |       
+|   |       |                   +---session
+|   |       |                   |       SessionContextService.java
+|   |       |                   |       
+|   |       |                   +---slot
+|   |       |                   |       SlotExtractor.java
+|   |       |                   |       
+|   |       |                   +---tools
+|   |       |                   |       AttendanceToolClient.java
+|   |       |                   |       SalaryToolClient.java
+|   |       |                   |       
+|   |       |                   \---web
+|   |       |                       |   AiController.java
+|   |       |                       |   ChatRouteService.java
+|   |       |                       |   
+|   |       |                       \---dto
+|   |       |                               ChatResponseDto.java
+|   |       |                               RouteDecisionDto.java
+|   |       |                               ToolCallEvidenceDto.java
+|   |       |                               
+|   |       \---resources
+|   |           |   application.yml
+|   |           |   
+|   |           \---db
+|   |               \---migration
+|   |                       V1__init.sql
+|   |                       
+|   \---target
+|       |   ai-hr-ai-core-0.1.0-SNAPSHOT.jar
+|       |   
+|       +---classes
+|       |   |   application.yml
+|       |   |   
+|       |   +---com
+|       |   |   \---example
+|       |   |       \---aihr
+|       |   |           \---aicore
+|       |   |               |   AiCoreApplication.class
+|       |   |               |   
+|       |   |               +---config
+|       |   |               |       HttpClientConfig.class
+|       |   |               |       ServiceEndpointsProperties.class
+|       |   |               |       
+|       |   |               +---domain
+|       |   |               |       AuditEventEntity.class
+|       |   |               |       ToolCallLogEntity.class
+|       |   |               |       
+|       |   |               +---llm
+|       |   |               |       DashScopeChatService.class
+|       |   |               |       ToolResultSummarizer.class
+|       |   |               |       
+|       |   |               +---milvus
+|       |   |               |       MilvusConfig.class
+|       |   |               |       MilvusHealthIndicator.class
+|       |   |               |       MilvusProperties.class
+|       |   |               |       
+|       |   |               +---rag
+|       |   |               |       EmbeddingService.class
+|       |   |               |       MilvusVectorStore.class
+|       |   |               |       PolicyChunkEntity.class
+|       |   |               |       PolicyChunkRepository.class
+|       |   |               |       PolicyDocumentEntity.class
+|       |   |               |       PolicyDocumentRepository.class
+|       |   |               |       PolicyRagService$Hit.class
+|       |   |               |       PolicyRagService$SearchResult.class
+|       |   |               |       PolicyRagService.class
+|       |   |               |       VectorStore.class
+|       |   |               |       
+|       |   |               +---repo
+|       |   |               |       AuditEventRepository.class
+|       |   |               |       ToolCallLogRepository.class
+|       |   |               |       
+|       |   |               +---security
+|       |   |               |       AuthContextFilter$1.class
+|       |   |               |       AuthContextFilter.class
+|       |   |               |       JwtProps.class
+|       |   |               |       RequestContext.class
+|       |   |               |       RequestContextHolder.class
+|       |   |               |       SecurityConfig.class
+|       |   |               |       
+|       |   |               +---service
+|       |   |               |       AuditService.class
+|       |   |               |       ToolCallLogger.class
+|       |   |               |       
+|       |   |               +---session
+|       |   |               |       SessionContextService$PendingSlots.class
+|       |   |               |       SessionContextService.class
+|       |   |               |       
+|       |   |               +---slot
+|       |   |               |       SlotExtractor.class
+|       |   |               |       
+|       |   |               +---tools
+|       |   |               |       AttendanceToolClient.class
+|       |   |               |       SalaryToolClient.class
+|       |   |               |       
+|       |   |               \---web
+|       |   |                   |   AiController$ChatRequest.class
+|       |   |                   |   AiController$IngestRequest.class
+|       |   |                   |   AiController.class
+|       |   |                   |   ChatRouteService.class
+|       |   |                   |   
+|       |   |                   \---dto
+|       |   |                           ChatResponseDto.class
+|       |   |                           RouteDecisionDto.class
+|       |   |                           ToolCallEvidenceDto.class
+|       |   |                           
+|       |   \---db
+|       |       \---migration
+|       |               V1__init.sql
+|       |               
+|       +---generated-sources
+|       |   \---annotations
+|       +---maven-archiver
+|       |       pom.properties
+|       |       
+|       \---maven-status
+|           \---maven-compiler-plugin
+|               \---compile
+|                   \---default-compile
+|                           createdFiles.lst
+|                           inputFiles.lst
+|                           
++---ai-hr-attendance
+|   |   pom.xml
+|   |   
+|   +---src
+|   |   \---main
+|   |       +---java
+|   |       |   \---com
+|   |       |       \---example
+|   |       |           \---aihr
+|   |       |               \---attendance
+|   |       |                   |   AttendanceApplication.java
+|   |       |                   |   
+|   |       |                   +---domain
+|   |       |                   |       AttendanceAnomalyEntity.java
+|   |       |                   |       AttendanceRecordEntity.java
+|   |       |                   |       AttendanceRuleSetEntity.java
+|   |       |                   |       AttendanceSnapshotEntity.java
+|   |       |                   |       AuditEventEntity.java
+|   |       |                   |       
+|   |       |                   +---model
+|   |       |                   |       AttendanceRuleSetDto.java
+|   |       |                   |       EvidenceDto.java
+|   |       |                   |       RuleHitDto.java
+|   |       |                   |       
+|   |       |                   +---repo
+|   |       |                   |       AttendanceAnomalyRepository.java
+|   |       |                   |       AttendanceRecordRepository.java
+|   |       |                   |       AttendanceRuleSetRepository.java
+|   |       |                   |       AttendanceSnapshotRepository.java
+|   |       |                   |       AuditEventRepository.java
+|   |       |                   |       
+|   |       |                   +---security
+|   |       |                   |       AuthContextFilter.java
+|   |       |                   |       JwtProps.java
+|   |       |                   |       RequestContext.java
+|   |       |                   |       RequestContextHolder.java
+|   |       |                   |       SecurityConfig.java
+|   |       |                   |       
+|   |       |                   +---service
+|   |       |                   |       AttendanceRuleEngine.java
+|   |       |                   |       AttendanceService.java
+|   |       |                   |       AuditService.java
+|   |       |                   |       
+|   |       |                   \---web
+|   |       |                       |   AttendanceController.java
+|   |       |                       |   
+|   |       |                       \---dto
+|   |       |                               AnomalyResponseDto.java
+|   |       |                               
+|   |       \---resources
+|   |           |   application.yml
+|   |           |   
+|   |           \---db
+|   |               \---migration
+|   |                       V1__init.sql
+|   |                       
+|   \---target
+|       |   ai-hr-attendance-0.1.0-SNAPSHOT.jar
+|       |   ai-hr-attendance-0.1.0-SNAPSHOT.jar.original
+|       |   
+|       +---classes
+|       |   |   application.yml
+|       |   |   
+|       |   +---com
+|       |   |   \---example
+|       |   |       \---aihr
+|       |   |           \---attendance
+|       |   |               |   AttendanceApplication.class
+|       |   |               |   
+|       |   |               +---domain
+|       |   |               |       AttendanceAnomalyEntity.class
+|       |   |               |       AttendanceRecordEntity.class
+|       |   |               |       AttendanceRuleSetEntity.class
+|       |   |               |       AttendanceSnapshotEntity.class
+|       |   |               |       AuditEventEntity.class
+|       |   |               |       
+|       |   |               +---model
+|       |   |               |       AttendanceRuleSetDto$Condition.class
+|       |   |               |       AttendanceRuleSetDto$RuleDef.class
+|       |   |               |       AttendanceRuleSetDto.class
+|       |   |               |       EvidenceDto.class
+|       |   |               |       RuleHitDto.class
+|       |   |               |       
+|       |   |               +---repo
+|       |   |               |       AttendanceAnomalyRepository.class
+|       |   |               |       AttendanceRecordRepository.class
+|       |   |               |       AttendanceRuleSetRepository.class
+|       |   |               |       AttendanceSnapshotRepository.class
+|       |   |               |       AuditEventRepository.class
+|       |   |               |       
+|       |   |               +---security
+|       |   |               |       AuthContextFilter$1.class
+|       |   |               |       AuthContextFilter.class
+|       |   |               |       JwtProps.class
+|       |   |               |       RequestContext.class
+|       |   |               |       RequestContextHolder.class
+|       |   |               |       SecurityConfig.class
+|       |   |               |       
+|       |   |               +---service
+|       |   |               |       AttendanceRuleEngine$AnomalyResult.class
+|       |   |               |       AttendanceRuleEngine.class
+|       |   |               |       AttendanceService$1.class
+|       |   |               |       AttendanceService$ComputeResult.class
+|       |   |               |       AttendanceService.class
+|       |   |               |       AuditService.class
+|       |   |               |       
+|       |   |               \---web
+|       |   |                   |   AttendanceController$ComputeRequest.class
+|       |   |                   |   AttendanceController$CreateRuleSetRequest.class
+|       |   |                   |   AttendanceController$UpsertRecordRequest.class
+|       |   |                   |   AttendanceController.class
+|       |   |                   |   
+|       |   |                   \---dto
+|       |   |                           AnomalyResponseDto.class
+|       |   |                           
+|       |   \---db
+|       |       \---migration
+|       |               V1__init.sql
+|       |               
+|       +---generated-sources
+|       |   \---annotations
+|       +---maven-archiver
+|       |       pom.properties
+|       |       
+|       \---maven-status
+|           \---maven-compiler-plugin
+|               \---compile
+|                   \---default-compile
+|                           createdFiles.lst
+|                           inputFiles.lst
+|                           
++---ai-hr-auth
+|   |   pom.xml
+|   |   
+|   +---src
+|   |   \---main
+|   |       +---java
+|   |       |   \---com
+|   |       |       \---example
+|   |       |           \---aihr
+|   |       |               \---auth
+|   |       |                   |   AuthApplication.java
+|   |       |                   |   
+|   |       |                   +---domain
+|   |       |                   |       UserEntity.java
+|   |       |                   |       UserRoleEntity.java
+|   |       |                   |       
+|   |       |                   +---repo
+|   |       |                   |       UserRepository.java
+|   |       |                   |       UserRoleRepository.java
+|   |       |                   |       
+|   |       |                   +---security
+|   |       |                   |       JwtProperties.java
+|   |       |                   |       JwtService.java
+|   |       |                   |       SecurityConfig.java
+|   |       |                   |       
+|   |       |                   \---web
+|   |       |                           AuthController.java
+|   |       |                           
+|   |       \---resources
+|   |           |   application.yml
+|   |           |   
+|   |           \---db
+|   |               \---migration
+|   |                       V1__init.sql
+|   |                       V2__seed_admin_password.sql
+|   |                       V3__alter_enabled_to_bit.sql
+|   |                       
+|   \---target
+|       |   ai-hr-auth-0.1.0-SNAPSHOT.jar
+|       |   ai-hr-auth-0.1.0-SNAPSHOT.jar.original
+|       |   
+|       +---classes
+|       |   |   application.yml
+|       |   |   
+|       |   +---com
+|       |   |   \---example
+|       |   |       \---aihr
+|       |   |           \---auth
+|       |   |               |   AuthApplication.class
+|       |   |               |   
+|       |   |               +---domain
+|       |   |               |       UserEntity.class
+|       |   |               |       UserRoleEntity$Pk.class
+|       |   |               |       UserRoleEntity.class
+|       |   |               |       
+|       |   |               +---repo
+|       |   |               |       UserRepository.class
+|       |   |               |       UserRoleRepository.class
+|       |   |               |       
+|       |   |               +---security
+|       |   |               |       JwtProperties.class
+|       |   |               |       JwtService.class
+|       |   |               |       SecurityConfig.class
+|       |   |               |       
+|       |   |               \---web
+|       |   |                       AuthController$TokenRequest.class
+|       |   |                       AuthController$TokenResponse.class
+|       |   |                       AuthController.class
+|       |   |                       
+|       |   \---db
+|       |       \---migration
+|       |               V1__init.sql
+|       |               V2__seed_admin_password.sql
+|       |               V3__alter_enabled_to_bit.sql
+|       |               
+|       +---generated-sources
+|       |   \---annotations
+|       +---maven-archiver
+|       |       pom.properties
+|       |       
+|       \---maven-status
+|           \---maven-compiler-plugin
+|               \---compile
+|                   \---default-compile
+|                           createdFiles.lst
+|                           inputFiles.lst
+|                           
++---ai-hr-common
+|   |   pom.xml
+|   |   
+|   +---src
+|   |   \---main
+|   |       \---java
+|   |           \---com
+|   |               \---example
+|   |                   \---aihr
+|   |                       \---common
+|   |                           +---audit
+|   |                           |       AuditEvent.java
+|   |                           |       
+|   |                           \---web
+|   |                                   ApiError.java
+|   |                                   GlobalExceptionHandler.java
+|   |                                   
+|   \---target
+|       |   ai-hr-common-0.1.0-SNAPSHOT.jar
+|       |   
+|       +---classes
+|       |   \---com
+|       |       \---example
+|       |           \---aihr
+|       |               \---common
+|       |                   +---audit
+|       |                   |       AuditEvent.class
+|       |                   |       
+|       |                   \---web
+|       |                           ApiError.class
+|       |                           GlobalExceptionHandler.class
+|       |                           
+|       +---generated-sources
+|       |   \---annotations
+|       +---maven-archiver
+|       |       pom.properties
+|       |       
+|       \---maven-status
+|           \---maven-compiler-plugin
+|               \---compile
+|                   \---default-compile
+|                           createdFiles.lst
+|                           inputFiles.lst
+|                           
++---ai-hr-gateway
+|   |   pom.xml
+|   |   
+|   +---src
+|   |   \---main
+|   |       +---java
+|   |       |   \---com
+|   |       |       \---example
+|   |       |           \---aihr
+|   |       |               \---gateway
+|   |       |                   |   GatewayApplication.java
+|   |       |                   |   
+|   |       |                   \---security
+|   |       |                           GatewaySecurityConfig.java
+|   |       |                           JwtProps.java
+|   |       |                           JwtRelayFilter.java
+|   |       |                           
+|   |       \---resources
+|   |               application.yml
+|   |               
+|   \---target
+|       |   ai-hr-gateway-0.1.0-SNAPSHOT.jar
+|       |   ai-hr-gateway-0.1.0-SNAPSHOT.jar.original
+|       |   
+|       +---classes
+|       |   |   application.yml
+|       |   |   
+|       |   \---com
+|       |       \---example
+|       |           \---aihr
+|       |               \---gateway
+|       |                   |   GatewayApplication.class
+|       |                   |   
+|       |                   \---security
+|       |                           GatewaySecurityConfig.class
+|       |                           JwtProps.class
+|       |                           JwtRelayFilter.class
+|       |                           
+|       +---generated-sources
+|       |   \---annotations
+|       +---maven-archiver
+|       |       pom.properties
+|       |       
+|       \---maven-status
+|           \---maven-compiler-plugin
+|               \---compile
+|                   \---default-compile
+|                           createdFiles.lst
+|                           inputFiles.lst
+|                           
++---ai-hr-salary
+|   |   pom.xml
+|   |   
+|   +---src
+|   |   \---main
+|   |       +---java
+|   |       |   \---com
+|   |       |       \---example
+|   |       |           \---aihr
+|   |       |               \---salary
+|   |       |                   |   SalaryApplication.java
+|   |       |                   |   
+|   |       |                   +---domain
+|   |       |                   |       AuditEventEntity.java
+|   |       |                   |       SalaryCalcRunEntity.java
+|   |       |                   |       SalaryInputSnapshotEntity.java
+|   |       |                   |       SalaryPolicyEntity.java
+|   |       |                   |       SalaryResultLineEntity.java
+|   |       |                   |       
+|   |       |                   +---model
+|   |       |                   |       SalaryPolicyDto.java
+|   |       |                   |       
+|   |       |                   +---repo
+|   |       |                   |       AuditEventRepository.java
+|   |       |                   |       SalaryCalcRunRepository.java
+|   |       |                   |       SalaryInputSnapshotRepository.java
+|   |       |                   |       SalaryPolicyRepository.java
+|   |       |                   |       SalaryResultLineRepository.java
+|   |       |                   |       
+|   |       |                   +---security
+|   |       |                   |       AuthContextFilter.java
+|   |       |                   |       JwtProps.java
+|   |       |                   |       RequestContext.java
+|   |       |                   |       RequestContextHolder.java
+|   |       |                   |       SecurityConfig.java
+|   |       |                   |       
+|   |       |                   +---service
+|   |       |                   |       AuditService.java
+|   |       |                   |       SalaryPolicyCalculator.java
+|   |       |                   |       SalaryService.java
+|   |       |                   |       
+|   |       |                   \---web
+|   |       |                           SalaryController.java
+|   |       |                           
+|   |       \---resources
+|   |           |   application.yml
+|   |           |   
+|   |           \---db
+|   |               \---migration
+|   |                       V1__init.sql
+|   |                       
+|   \---target
+|       |   ai-hr-salary-0.1.0-SNAPSHOT.jar
+|       |   ai-hr-salary-0.1.0-SNAPSHOT.jar.original
+|       |   
+|       +---classes
+|       |   |   application.yml
+|       |   |   
+|       |   +---com
+|       |   |   \---example
+|       |   |       \---aihr
+|       |   |           \---salary
+|       |   |               |   SalaryApplication.class
+|       |   |               |   
+|       |   |               +---domain
+|       |   |               |       AuditEventEntity.class
+|       |   |               |       SalaryCalcRunEntity.class
+|       |   |               |       SalaryInputSnapshotEntity.class
+|       |   |               |       SalaryPolicyEntity.class
+|       |   |               |       SalaryResultLineEntity.class
+|       |   |               |       
+|       |   |               +---model
+|       |   |               |       SalaryPolicyDto$ItemDef.class
+|       |   |               |       SalaryPolicyDto.class
+|       |   |               |       
+|       |   |               +---repo
+|       |   |               |       AuditEventRepository.class
+|       |   |               |       SalaryCalcRunRepository.class
+|       |   |               |       SalaryInputSnapshotRepository.class
+|       |   |               |       SalaryPolicyRepository.class
+|       |   |               |       SalaryResultLineRepository.class
+|       |   |               |       
+|       |   |               +---security
+|       |   |               |       AuthContextFilter$1.class
+|       |   |               |       AuthContextFilter.class
+|       |   |               |       JwtProps.class
+|       |   |               |       RequestContext.class
+|       |   |               |       RequestContextHolder.class
+|       |   |               |       SecurityConfig.class
+|       |   |               |       
+|       |   |               +---service
+|       |   |               |       AuditService.class
+|       |   |               |       SalaryPolicyCalculator.class
+|       |   |               |       SalaryService$CalcOutcome.class
+|       |   |               |       SalaryService$Line.class
+|       |   |               |       SalaryService$PreviewResult.class
+|       |   |               |       SalaryService.class
+|       |   |               |       
+|       |   |               \---web
+|       |   |                       SalaryController$1.class
+|       |   |                       SalaryController$CreatePolicyRequest.class
+|       |   |                       SalaryController$PreviewEmployeeRequest.class
+|       |   |                       SalaryController.class
+|       |   |                       
+|       |   \---db
+|       |       \---migration
+|       |               V1__init.sql
+|       |               
+|       +---generated-sources
+|       |   \---annotations
+|       +---maven-archiver
+|       |       pom.properties
+|       |       
+|       \---maven-status
+|           \---maven-compiler-plugin
+|               \---compile
+|                   \---default-compile
+|                           createdFiles.lst
+|                           inputFiles.lst
+|                           
+\---META-INF
+        MANIFEST.MF
+        
