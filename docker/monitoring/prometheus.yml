@@ -1,0 +1,24 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: "spring-services"
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets:
+          - ai-hr-gateway:9100
+          - ai-hr-ai-core:9030
+          - ai-hr-attendance:9010
+          - ai-hr-salary:9020
+
+  - job_name: "mysql"
+    static_configs:
+      - targets:
+          - mysqld-exporter:9104
+
+  - job_name: "milvus"
+    metrics_path: /metrics
+    static_configs:
+      - targets:
+          - standalone:9091

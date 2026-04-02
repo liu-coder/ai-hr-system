@@ -1,0 +1,6 @@
+# Prometheus 采集 MySQL 指标的连接配置
+[client]
+user=prometheus
+password=prometheus
+host=mysql
+port=3306

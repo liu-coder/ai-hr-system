@@ -1,0 +1,48 @@
+version: "3.9"
+
+services:
+  prometheus:
+    image: prom/prometheus:v2.52.0
+    container_name: prometheus
+    networks:
+      - app-network
+    ports:
+      - "9090:9090"
+    volumes:
+      - E:/workspace/docker/data/prometheus:/prometheus
+      - ./docker/monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--storage.tsdb.retention.time=15d"
+
+  grafana:
+    image: grafana/grafana:11.1.0
+    container_name: grafana
+    networks:
+      - app-network
+    ports:
+      - "3000:3000"
+    volumes:
+      - E:/workspace/docker/data/grafana:/var/lib/grafana
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+
+  mysqld-exporter:
+    image: prom/mysqld-exporter:v0.15.1
+    container_name: mysqld-exporter
+    networks:
+      - app-network
+    ports:
+      - "9104:9104"
+    volumes:
+      - ./docker/monitoring/mysql-exporter.cnf:/etc/mysql/my.cnf:ro
+    command:
+      - "--config.my-cnf=/etc/mysql/my.cnf"
+    depends_on:
+      - prometheus
+
+networks:
+  app-network:
+    external: true
