@@ -11,7 +11,7 @@
 ## 1. 服务与端口
 
 - Prometheus：`9090`
-- Grafana：`3000`（admin/admin）
+- Grafana：`3000`（admin/admin，默认语言简体中文）
 - MySQL exporter：`9104`
 
 Milvus 指标从现有 `milvus-standalone` 的 `/metrics` 直接抓取。
@@ -64,7 +64,8 @@ Prometheus 可直接访问网络内服务名（例如 `ai-hr-ai-core`、`standal
 - 密码：`prometheus`
 - 权限：只读（用于指标采集）
 
-Exporter 连接 `mysql` 容器并在 `9104` 暴露指标。
+Exporter 通过 `docker/monitoring/mysql-exporter.cnf` 连接 `mysql` 容器，并在 `9104` 暴露指标。
+建议使用 `--config.my-cnf=/etc/mysql/my.cnf` 指定连接配置。
 
 ## 7. Grafana 初始看板
 
@@ -77,10 +78,16 @@ Exporter 连接 `mysql` 容器并在 `9104` 暴露指标。
 
 ## 8. 验证步骤
 
-1. 启动监控栈：`docker compose -f docker-compose.monitoring.yml up -d`
+1. 启动监控栈：`docker compose -p irsai -f docker-compose.monitoring.yml up -d`
 2. 打开 Prometheus：`http://localhost:9090`，确认 targets 全部 `UP`
 3. 打开 Grafana：`http://localhost:3000`，账号 `admin/admin`
-4. 发送几次 `/v1/ai/chat`，确认延迟指标出现
+4. 校验 MySQL exporter：`http://localhost:9104/metrics`
+5. 发送几次 `/v1/ai/chat`，确认延迟指标出现
+
+## 9. 语言与指标命名说明
+
+- Grafana 默认语言设置为简体中文，但欢迎页/部分内置面板仍为英文（官方未完全本地化）。
+- Prometheus 指标名为英文原始名称，Grafana 不会自动翻译。建议在面板标题与图例里使用中文别名。
 
 ---
 
