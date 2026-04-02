@@ -52,3 +52,6 @@ public class WorkHourPredictionRequestDto {
         this.historicalMonths = historicalMonths;
     }
 }
+
+
+

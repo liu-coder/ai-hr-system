@@ -32,6 +32,9 @@ public class ToolResultSummarizer {
     private String summarizeAttendance(Object toolResult) {
         try {
             JsonNode arr = om.valueToTree(toolResult);
+            if (arr.isObject() && arr.has("data") && arr.get("data").isArray()) {
+                arr = arr.get("data");
+            }
             if (!arr.isArray()) return fallbackJson(toolResult);
             int n = arr.size();
             if (n == 0) return "该时间段内无考勤异常记录。";
@@ -43,7 +46,7 @@ public class ToolResultSummarizer {
                 if (item.has("workDate") && item.has("ruleHit")) {
                     String msg = item.has("evidence") && item.get("evidence").has("summary")
                             ? item.get("evidence").get("summary").asText("")
-                            : item.get("ruleHit").asText("");
+                            : ruleHitMessage(item.get("ruleHit"));
                     parts.add(item.get("workDate").asText("") + " " + msg);
                 }
             }
@@ -85,6 +88,19 @@ public class ToolResultSummarizer {
         } catch (Exception e) {
             return fallbackJson(toolResult);
         }
+    }
+
+    private static String ruleHitMessage(JsonNode ruleHit) {
+        if (ruleHit == null || ruleHit.isNull()) {
+            return "";
+        }
+        if (ruleHit.isTextual()) {
+            return ruleHit.asText("");
+        }
+        if (ruleHit.isObject() && ruleHit.has("message")) {
+            return ruleHit.get("message").asText("");
+        }
+        return ruleHit.toString();
     }
 
     private String fallbackJson(Object o) {
@@ -138,3 +154,6 @@ public class ToolResultSummarizer {
         }
     }
 }
+
+
+

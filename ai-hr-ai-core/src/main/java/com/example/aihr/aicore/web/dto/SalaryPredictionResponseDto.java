@@ -51,3 +51,6 @@ public class SalaryPredictionResponseDto {
         this.fiveYearSalaryProjection = fiveYearSalaryProjection;
     }
 }
+
+
+

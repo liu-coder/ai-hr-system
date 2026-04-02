@@ -49,3 +49,6 @@ public class SalaryAdjustmentDto {
         this.reason = reason;
     }
 }
+
+
+

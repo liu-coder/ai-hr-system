@@ -1,11 +1,16 @@
+server:
+  port: 9030
+
 spring:
   data:
     redis:
       host: ${AIHR_REDIS_HOST:localhost}
       port: ${AIHR_REDIS_PORT:6379}
+      password: ${AIHR_REDIS_PASSWORD:redis}
   ai:
     dashscope:
-      api-key: ${AIHR_DASHSCOPE_API_KEY:}
+      # 项目内主配置：冒号后为未设置环境变量 AIHR_DASHSCOPE_API_KEY 时的默认值。不要在 compose 里注入空串覆盖。
+      api-key: ${AIHR_DASHSCOPE_API_KEY:sk-b4457e61a0954553b3476f5222af224c}
       chat:
         enabled: true
         model: qwen3.5-plus
@@ -15,13 +20,17 @@ spring:
       agent:
         enabled: true
         model: qwen2.5-omni-7b
-    model:
-      audio:
-        transcription: none
+  model:
+    audio:
+      transcription: none
   datasource:
     url: jdbc:mysql://${AIHR_MYSQL_HOST:localhost}:${AIHR_MYSQL_PORT:3306}/ai_hr_aicore?useUnicode=true&characterEncoding=utf8&useSSL=false&allowPublicKeyRetrieval=true&createDatabaseIfNotExist=true
     username: ${AIHR_MYSQL_USER:root}
     password: ${AIHR_MYSQL_PASSWORD:root}
+    hikari:
+      jdbc-url: jdbc:mysql://${AIHR_MYSQL_HOST:localhost}:${AIHR_MYSQL_PORT:3306}/ai_hr_aicore?useUnicode=true&characterEncoding=utf8&useSSL=false&allowPublicKeyRetrieval=true&createDatabaseIfNotExist=true
+      username: ${AIHR_MYSQL_USER:root}
+      password: ${AIHR_MYSQL_PASSWORD:root}
   jpa:
     open-in-view: false
     hibernate:
@@ -37,7 +46,7 @@ spring:
 eureka:
   client:
     service-url:
-      defaultZone: http://localhost:8761/eureka/
+      defaultZone: ${AIHR_EUREKA_URL:http://localhost:8761/eureka/}
   instance:
     prefer-ip-address: true
 
@@ -56,8 +65,8 @@ aihr:
     initial-backoff-ms: 100
   security:
     jwt:
-      issuer: ${AIHR_JWT_ISSUER:ai-hr-auth}
-      secret: ${AIHR_JWT_SECRET:DefaultJWTSecretKey1234567890ABCDEFGHIJKLMNOPQRSTUVWXYZ}
+      issuer: "${AIHR_JWT_ISSUER:ai-hr-auth}"
+      secret: "${AIHR_JWT_SECRET:A9b@C8d!E7f%G6h*I5j?K4l&M3n@P2q!R1s%T0u@}"
 
 management:
   endpoints:

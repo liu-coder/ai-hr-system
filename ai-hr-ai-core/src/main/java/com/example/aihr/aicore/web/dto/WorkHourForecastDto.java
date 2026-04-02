@@ -67,3 +67,6 @@ public class WorkHourForecastDto {
         this.manpowerShortage = manpowerShortage;
     }
 }
+
+
+

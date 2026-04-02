@@ -1,84 +1,31 @@
-server:
-  port: 9030
-
 spring:
   application:
     name: ai-hr-ai-core
-
-  data:
-    redis:
-      host: ${AIHR_REDIS_HOST:localhost}
-      port: ${AIHR_REDIS_PORT:6379}
-
-# Eureka 客户端配置
-eureka:
-  client:
-    service-url:
-      defaultZone: http://localhost:8761/eureka/
-  instance:
-    prefer-ip-address: true
-
+  config:
+    import: optional:configserver:${SPRING_CLOUD_CONFIG_URI:http://localhost:8888}
   ai:
-    # 1) DashScope 相关能力：不填 key 也要能启动。
-    #    - chat/rerank/agent 关闭，避免自动装配时强制要求真实 key。
-    #    - 实际调用时（你配置 key）由代码条件触发。
     dashscope:
-      api-key: ${AIHR_DASHSCOPE_API_KEY:}
-      chat:
-        enabled: true
-        model: qwen3.5-plus
-      rerank:
-        enabled: false # 您明确要求禁用，避免启动时需要API Key
-        model: gte-rerank
-      agent:
-        enabled: true
-        model: qwen2.5-omni-7b
+      # 配置中心暂不可达时的兜底（与 config-server 中 ai-hr-ai-core.yml 默认一致）
+      api-key: ${AIHR_DASHSCOPE_API_KEY:sk-b4457e61a0954553b3476f5222af224c}
 
-    # 2) 音频转写：必须是顶层 spring.ai.model.audio.transcription=none 才能彻底禁用
-    model:
-      audio:
-        transcription: none
-
-  datasource:
-    url: jdbc:mysql://${AIHR_MYSQL_HOST:localhost}:${AIHR_MYSQL_PORT:3306}/ai_hr_aicore?useUnicode=true&characterEncoding=utf8&useSSL=false&allowPublicKeyRetrieval=true&createDatabaseIfNotExist=true
-    username: ${AIHR_MYSQL_USER:root}
-    password: ${AIHR_MYSQL_PASSWORD:root}
-
-  jpa:
-    open-in-view: false
-    hibernate:
-      ddl-auto: validate
-
-  flyway:
-    enabled: true
-
+# 配置中心晚于本服务启动时，Docker 注入的 AIHR_JWT_* 需映射到此，否则 ServiceJwtProps 校验失败导致进程退出
 aihr:
+  security:
+    jwt:
+      issuer: ${AIHR_JWT_ISSUER:ai-hr-auth}
+      secret: ${AIHR_JWT_SECRET:A9b@C8d!E7f%G6h*I5j?K4l&M3n@P2q!R1s%T0u@}
   milvus:
     host: ${AIHR_MILVUS_HOST:localhost}
     port: ${AIHR_MILVUS_PORT:19530}
     database: ${AIHR_MILVUS_DATABASE:default}
     collection: ${AIHR_MILVUS_COLLECTION:ai_hr_policy_chunks}
-
   services:
     attendance-base-url: http://ai-hr-attendance
     salary-base-url: http://ai-hr-salary
-
   toolinvoker:
     max-attempts: 3
     timeout-ms: 5000
     initial-backoff-ms: 100
 
-  security:
-    jwt:
-      issuer: ${AIHR_JWT_ISSUER:ai-hr-auth}
-      secret: ${AIHR_JWT_SECRET:}
-
-management:
-  endpoints:
-    web:
-      exposure:
-        include: health,info,metrics,prometheus
-  health:
-    nacosConfig:
-      enabled: false
-
+server:
+  port: ${SERVER_PORT:9030}

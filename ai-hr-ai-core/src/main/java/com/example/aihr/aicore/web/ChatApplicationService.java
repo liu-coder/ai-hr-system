@@ -1,11 +1,13 @@
 package com.example.aihr.aicore.web;
 
+import com.example.aihr.aicore.config.ThreadPoolConfig;
 import com.example.aihr.aicore.llm.DashScopeChatService;
 import com.example.aihr.aicore.llm.ToolResultSummarizer;
 import com.example.aihr.aicore.rag.PolicyRagService;
 import com.example.aihr.aicore.ratelimit.RateLimitConfig;
 import com.example.aihr.aicore.repo.ToolCallLogRepository;
-import com.example.aihr.aicore.session.SessionContextService;
+import com.example.aihr.aicore.service.MetricsService;
+
 import com.example.aihr.aicore.slot.SlotExtractor;
 import com.example.aihr.aicore.tools.AttendanceToolClient;
 import com.example.aihr.aicore.tools.SalaryToolClient;
@@ -16,6 +18,7 @@ import com.example.aihr.aicore.web.dto.ToolCallEvidenceDto;
 import com.example.aihr.common.exception.AiHrBusinessException;
 import com.example.aihr.common.security.RequestContext;
 import com.example.aihr.common.security.RequestContextHolder;
+import com.example.aihr.common.validation.InputValidator;
 import com.example.aihr.common.web.ApiError.ErrorCode;
 import java.time.YearMonth;
 import java.time.format.DateTimeFormatter;
@@ -27,12 +30,11 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
-import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
 
@@ -64,14 +66,13 @@ public class ChatApplicationService {
     private final InputValidator inputValidator;
     private final ChatToolArgumentService chatToolArgumentService;
     private final ChatPromptService chatPromptService;
-    private final Counter chatRequestCounter;
-    private final Counter toolCallCounter;
-    private final Counter llmCallCounter;
-    private final Counter errorCounter;
+    private final MetricsService metricsService;
+    private final org.springframework.core.env.Environment env;
     private final Timer chatRequestTimer;
     
-    // 构造函数中初始化线程池，使用可配置的线程数
+    // 构造函数中使用配置的线程池
     public ChatApplicationService(
+            @Qualifier("chatExecutorService") ExecutorService executorService,
             AttendanceToolClient attendanceTool,
             SalaryToolClient salaryTool,
             PolicyRagService rag,
@@ -84,7 +85,11 @@ public class ChatApplicationService {
             InputValidator inputValidator,
             ChatToolArgumentService chatToolArgumentService,
             ChatPromptService chatPromptService,
-            MeterRegistry meterRegistry) {
+            MeterRegistry meterRegistry,
+            ThreadPoolConfig.ThreadPoolMonitor threadPoolMonitor,
+            MetricsService metricsService,
+            org.springframework.core.env.Environment env) {
+        this.executorService = executorService;
         this.attendanceTool = attendanceTool;
         this.salaryTool = salaryTool;
         this.rag = rag;
@@ -97,29 +102,23 @@ public class ChatApplicationService {
         this.inputValidator = inputValidator;
         this.chatToolArgumentService = chatToolArgumentService;
         this.chatPromptService = chatPromptService;
+        this.metricsService = metricsService;
+        this.env = env;
         
-        // 初始化线程池，线程数可配置
-        int corePoolSize = Integer.parseInt(System.getenv().getOrDefault("AIHR_THREAD_POOL_SIZE", "10"));
-        this.executorService = Executors.newFixedThreadPool(corePoolSize);
+        // 打印 dashscope api-key 配置
+        String apiKey = env.getProperty("spring.ai.dashscope.api-key");
+        logger.info("spring.ai.dashscope.api-key: {}", apiKey);
+        logger.info("spring.ai.dashscope.api-key is blank: {}", apiKey == null || apiKey.isBlank());
+        logger.info("spring.ai.dashscope.api-key equals 'sk-placeholder': {}", "sk-placeholder".equals(apiKey));
+        
+        // 打印 DashScopeChatService 是否可用
+        DashScopeChatService svc = dashScopeChatService.getIfAvailable();
+        logger.info("DashScopeChatService is available: {}", svc != null);
+        
+        // 监控线程池状态
+        threadPoolMonitor.monitor(executorService, "chat");
         
         // 初始化监控指标
-        this.chatRequestCounter = Counter.builder("aihr.chat.requests")
-                .description("Number of chat requests")
-                .register(meterRegistry);
-        
-        this.toolCallCounter = Counter.builder("aihr.tool.calls")
-                .description("Number of tool calls")
-                .tag("tool", "all")
-                .register(meterRegistry);
-        
-        this.llmCallCounter = Counter.builder("aihr.llm.calls")
-                .description("Number of LLM calls")
-                .register(meterRegistry);
-        
-        this.errorCounter = Counter.builder("aihr.errors")
-                .description("Number of errors")
-                .register(meterRegistry);
-        
         this.chatRequestTimer = Timer.builder("aihr.chat.requests.duration")
                 .description("Chat request processing time")
                 .register(meterRegistry);
@@ -145,41 +144,46 @@ public class ChatApplicationService {
      */
     public ChatResponseDto handleChat(String requestSessionId, String message, Map<String, Object> requestToolArgs, String traceId) {
         return chatRequestTimer.record(() -> {
-            chatRequestCounter.increment();
-            
-            RequestContext ctx = RequestContextHolder.getRequired();
-            validateRateLimit(ctx);
-            
-            String sessionId = getOrCreateSessionId(requestSessionId);
-            String text = validateUserInput(message);
-            
-            RouteDecisionDto routeDecision = routeService.decide(text);
-            String route = routeDecision.route();
-            Map<String, Object> effectiveToolArgs = chatToolArgumentService.buildEffectiveToolArgs(requestToolArgs, text, route, sessionId);
-            
-            ToolExecutionResult toolExecutionResult = executeTool(ctx, sessionId, traceId, route, effectiveToolArgs, text);
-            
-            String llmResult = callLLM(ctx, text, route, toolExecutionResult, routeDecision);
-            boolean llmAvailable = llmResult != null;
-            
-            String fallbackReason = buildFallbackReason(llmAvailable, toolExecutionResult.isToolArgsMissing(), toolExecutionResult.getToolResult());
-            
-            ToolCallEvidenceDto toolCall = buildToolCallEvidence(sessionId, toolExecutionResult.getToolName(), toolExecutionResult.getToolResult());
-            
-            String evidenceSummary = chatPromptService.buildEvidenceSummary(routeDecision, toolCall, toolExecutionResult.getRagResult(), llmAvailable, toolExecutionResult.isToolArgsMissing());
-            
-            return new ChatResponseDto(
-                    sessionId,
-                    text,
-                    routeDecision,
-                    llmAvailable,
-                    fallbackReason,
-                    toolCall,
-                    toolExecutionResult.getRagResult(),
-                    llmResult,
-                    evidenceSummary,
-                    toolExecutionResult.getFollowUpPrompt()
-            );
+            metricsService.incrementActiveRequests();
+            try {
+                metricsService.recordChatRequest();
+                
+                RequestContext ctx = RequestContextHolder.getRequired();
+                validateRateLimit(ctx);
+                
+                String sessionId = getOrCreateSessionId(requestSessionId);
+                String text = validateUserInput(message);
+                
+                RouteDecisionDto routeDecision = routeService.decide(text);
+                String route = routeDecision.route();
+                Map<String, Object> effectiveToolArgs = chatToolArgumentService.buildEffectiveToolArgs(requestToolArgs, text, route, sessionId);
+                
+                ToolExecutionResult toolExecutionResult = executeTool(ctx, sessionId, traceId, route, effectiveToolArgs, text);
+                
+                String llmResult = callLLM(ctx, text, route, toolExecutionResult, routeDecision);
+                boolean llmAvailable = llmResult != null;
+                
+                String fallbackReason = buildFallbackReason(llmAvailable, toolExecutionResult.isToolArgsMissing(), toolExecutionResult.getToolResult());
+                
+                ToolCallEvidenceDto toolCall = buildToolCallEvidence(sessionId, toolExecutionResult.getToolName(), toolExecutionResult.getToolResult());
+                
+                String evidenceSummary = chatPromptService.buildEvidenceSummary(routeDecision, toolCall, toolExecutionResult.getRagResult(), llmAvailable, toolExecutionResult.isToolArgsMissing());
+                
+                return new ChatResponseDto(
+                        sessionId,
+                        text,
+                        routeDecision,
+                        llmAvailable,
+                        fallbackReason,
+                        toolCall,
+                        toolExecutionResult.getRagResult(),
+                        llmResult,
+                        evidenceSummary,
+                        toolExecutionResult.getFollowUpPrompt()
+                );
+            } finally {
+                metricsService.decrementActiveRequests();
+            }
         });
     }
     
@@ -261,76 +265,213 @@ public class ChatApplicationService {
      * @return 工具执行结果，包含工具调用结果、工具名称、RAG结果等信息
      */
     private ToolExecutionResult executeTool(RequestContext ctx, String sessionId, String traceId, String route, Map<String, Object> effectiveToolArgs, String text) {
-        ToolResult<Object> toolResult = null;
-        String toolName = null;
-        Object ragResult = null;
-        boolean toolArgsMissing = false;
-        String followUpPrompt = null;
+        ToolExecutionResult result = null;
         
         try {
             if ("ATTENDANCE".equals(route) || "ATTENDANCE_PATTERN".equals(route)) {
-                if (effectiveToolArgs != null && slotExtractor.hasRequiredAttendanceSlots(effectiveToolArgs)) {
-                    String op = effectiveToolArgs != null ? String.valueOf(effectiveToolArgs.getOrDefault("op", "listAnomalies")) : "listAnomalies";
-                    toolName = "computeAnomalies".equals(op) ? "attendance.computeAnomalies" : "attendance.listAnomalies";
-                    toolCallCounter.increment();
-                    toolResult = "computeAnomalies".equals(op)
-                            ? attendanceTool.computeAnomalies(sessionId, traceId, effectiveToolArgs)
-                            : attendanceTool.listAnomalies(sessionId, traceId, effectiveToolArgs);
-                } else {
-                    toolArgsMissing = true;
-                    followUpPrompt = chatPromptService.buildFollowUpPrompt(route, effectiveToolArgs, "attendance",
-                            "employeeId=e-001&start=2026-03-01&end=2026-03-31");
-                    chatToolArgumentService.cachePending(sessionId, route, effectiveToolArgs, followUpPrompt);
-                }
+                result = executeAttendanceTool(ctx, sessionId, traceId, route, effectiveToolArgs, text);
             } else if ("ATTENDANCE_MULTI_SUMMARY".equals(route)) {
-                if (effectiveToolArgs != null && slotExtractor.hasRequiredAttendanceMultiSummarySlots(effectiveToolArgs)) {
-                    toolName = "attendance.listAnomalies(batch)";
-                    toolCallCounter.increment();
-                    toolResult = aggregateAttendanceMultiSummary(sessionId, traceId, effectiveToolArgs);
-                } else {
-                    toolArgsMissing = true;
-                    followUpPrompt = chatPromptService.buildFollowUpPrompt(route, effectiveToolArgs, "attendance summary",
-                            "employeeIds=[e-001,e-002]&start=2026-03-01&end=2026-03-31");
-                    chatToolArgumentService.cachePending(sessionId, route, effectiveToolArgs, followUpPrompt);
-                }
+                result = executeAttendanceMultiSummaryTool(ctx, sessionId, traceId, route, effectiveToolArgs, text);
             } else if ("SALARY".equals(route)) {
-                if (effectiveToolArgs != null && slotExtractor.hasRequiredSalarySlots(effectiveToolArgs)) {
-                    toolName = "salary.previewEmployee";
-                    toolCallCounter.increment();
-                    toolResult = salaryTool.previewEmployee(sessionId, traceId, effectiveToolArgs);
-                } else {
-                    toolArgsMissing = true;
-                    followUpPrompt = chatPromptService.buildFollowUpPrompt(route, effectiveToolArgs, "salary",
-                            "employeeId=e-001&payPeriod=2026-03");
-                    chatToolArgumentService.cachePending(sessionId, route, effectiveToolArgs, followUpPrompt);
-                }
+                result = executeSalaryTool(ctx, sessionId, traceId, route, effectiveToolArgs, text);
             } else if ("SALARY_DIFF".equals(route)) {
-                if (effectiveToolArgs != null && slotExtractor.hasRequiredSalarySlots(effectiveToolArgs)) {
-                    toolName = "salary.comparePreview";
-                    toolCallCounter.increment();
-                    toolResult = compareSalaryPreview(sessionId, traceId, effectiveToolArgs);
-                } else {
-                    toolArgsMissing = true;
-                    followUpPrompt = chatPromptService.buildFollowUpPrompt(route, effectiveToolArgs, "salary comparison",
-                            "employeeId=e-001&payPeriod=2026-03");
-                    chatToolArgumentService.cachePending(sessionId, route, effectiveToolArgs, followUpPrompt);
-                }
+                result = executeSalaryDiffTool(ctx, sessionId, traceId, route, effectiveToolArgs, text);
             } else if ("POLICY_RECOMMEND".equals(route) || "COMPLIANCE_RISK".equals(route)) {
-                toolCallCounter.increment();
-                ragResult = rag.search(ctx.tenantId(), text, 5);
+                result = executePolicyTool(ctx, sessionId, traceId, route, text);
+            } else if ("POLICY_RAG".equals(route)) {
+                result = executePolicyRagTool(ctx, text);
+            } else {
+                result = new ToolExecutionResult(null, null, null, false, null);
             }
             
-            if (toolArgsMissing || "POLICY_RAG".equals(route) || (toolResult != null && !toolResult.success())) {
-                toolCallCounter.increment();
-                ragResult = rag.search(ctx.tenantId(), text, 5);
+            // 处理工具执行失败或参数缺失的情况
+            if (result != null) {
+                result = handleToolExecutionFailure(ctx, text, result);
             }
         } catch (Exception e) {
             logger.error("Tool execution failed: {}", e.getMessage(), e);
-            errorCounter.increment();
-            toolResult = ToolResult.failed("Tool execution failed: " + e.getMessage());
+            metricsService.recordError("tool_execution");
+            result = new ToolExecutionResult(ToolResult.failed("Tool execution failed: " + e.getMessage()), null, null, false, null);
         }
         
-        return new ToolExecutionResult(toolResult, toolName, ragResult, toolArgsMissing, followUpPrompt);
+        return result;
+    }
+    
+    /**
+     * 执行考勤相关工具。
+     * 
+     * @param ctx 请求上下文
+     * @param sessionId 会话ID
+     * @param traceId 跟踪ID
+     * @param route 路由类型
+     * @param effectiveToolArgs 工具参数
+     * @param text 用户输入文本
+     * @return 工具执行结果
+     */
+    private ToolExecutionResult executeAttendanceTool(RequestContext ctx, String sessionId, String traceId, String route, Map<String, Object> effectiveToolArgs, String text) {
+        if (effectiveToolArgs != null && slotExtractor.hasRequiredAttendanceSlots(effectiveToolArgs)) {
+            String op = effectiveToolArgs != null ? String.valueOf(effectiveToolArgs.getOrDefault("op", "listAnomalies")) : "listAnomalies";
+            String toolName = "computeAnomalies".equals(op) ? "attendance.computeAnomalies" : "attendance.listAnomalies";
+            long startTime = System.currentTimeMillis();
+            ToolResult<Object> toolResult = "computeAnomalies".equals(op)
+                    ? attendanceTool.computeAnomalies(sessionId, traceId, effectiveToolArgs)
+                    : attendanceTool.listAnomalies(sessionId, traceId, effectiveToolArgs);
+            long duration = System.currentTimeMillis() - startTime;
+            metricsService.recordToolCall(toolName, toolResult.success());
+            metricsService.recordToolCallDuration(toolName, duration, toolResult.success());
+            return new ToolExecutionResult(toolResult, toolName, null, false, null);
+        } else {
+            boolean toolArgsMissing = true;
+            String followUpPrompt = chatPromptService.buildFollowUpPrompt(route, effectiveToolArgs, "attendance",
+                    "employeeId=e-001&start=2026-03-01&end=2026-03-31");
+            chatToolArgumentService.cachePending(sessionId, route, effectiveToolArgs, followUpPrompt);
+            return new ToolExecutionResult(null, null, null, toolArgsMissing, followUpPrompt);
+        }
+    }
+    
+    /**
+     * 执行批量考勤查询工具。
+     * 
+     * @param ctx 请求上下文
+     * @param sessionId 会话ID
+     * @param traceId 跟踪ID
+     * @param route 路由类型
+     * @param effectiveToolArgs 工具参数
+     * @param text 用户输入文本
+     * @return 工具执行结果
+     */
+    private ToolExecutionResult executeAttendanceMultiSummaryTool(RequestContext ctx, String sessionId, String traceId, String route, Map<String, Object> effectiveToolArgs, String text) {
+        if (effectiveToolArgs != null && slotExtractor.hasRequiredAttendanceMultiSummarySlots(effectiveToolArgs)) {
+            String toolName = "attendance.listAnomalies(batch)";
+            long startTime = System.currentTimeMillis();
+            ToolResult<Object> toolResult = aggregateAttendanceMultiSummary(sessionId, traceId, effectiveToolArgs);
+            long duration = System.currentTimeMillis() - startTime;
+            metricsService.recordToolCall(toolName, toolResult.success());
+            metricsService.recordToolCallDuration(toolName, duration, toolResult.success());
+            return new ToolExecutionResult(toolResult, toolName, null, false, null);
+        } else {
+            boolean toolArgsMissing = true;
+            String followUpPrompt = chatPromptService.buildFollowUpPrompt(route, effectiveToolArgs, "attendance summary",
+                    "employeeIds=[e-001,e-002]&start=2026-03-01&end=2026-03-31");
+            chatToolArgumentService.cachePending(sessionId, route, effectiveToolArgs, followUpPrompt);
+            return new ToolExecutionResult(null, null, null, toolArgsMissing, followUpPrompt);
+        }
+    }
+    
+    /**
+     * 执行薪资相关工具。
+     * 
+     * @param ctx 请求上下文
+     * @param sessionId 会话ID
+     * @param traceId 跟踪ID
+     * @param route 路由类型
+     * @param effectiveToolArgs 工具参数
+     * @param text 用户输入文本
+     * @return 工具执行结果
+     */
+    private ToolExecutionResult executeSalaryTool(RequestContext ctx, String sessionId, String traceId, String route, Map<String, Object> effectiveToolArgs, String text) {
+        if (effectiveToolArgs != null && slotExtractor.hasRequiredSalarySlots(effectiveToolArgs)) {
+            String toolName = "salary.previewEmployee";
+            long startTime = System.currentTimeMillis();
+            ToolResult<Object> toolResult = salaryTool.previewEmployee(sessionId, traceId, effectiveToolArgs);
+            long duration = System.currentTimeMillis() - startTime;
+            metricsService.recordToolCall(toolName, toolResult.success());
+            metricsService.recordToolCallDuration(toolName, duration, toolResult.success());
+            return new ToolExecutionResult(toolResult, toolName, null, false, null);
+        } else {
+            boolean toolArgsMissing = true;
+            String followUpPrompt = chatPromptService.buildFollowUpPrompt(route, effectiveToolArgs, "salary",
+                    "employeeId=e-001&payPeriod=2026-03");
+            chatToolArgumentService.cachePending(sessionId, route, effectiveToolArgs, followUpPrompt);
+            return new ToolExecutionResult(null, null, null, toolArgsMissing, followUpPrompt);
+        }
+    }
+    
+    /**
+     * 执行薪资比较工具。
+     * 
+     * @param ctx 请求上下文
+     * @param sessionId 会话ID
+     * @param traceId 跟踪ID
+     * @param route 路由类型
+     * @param effectiveToolArgs 工具参数
+     * @param text 用户输入文本
+     * @return 工具执行结果
+     */
+    private ToolExecutionResult executeSalaryDiffTool(RequestContext ctx, String sessionId, String traceId, String route, Map<String, Object> effectiveToolArgs, String text) {
+        if (effectiveToolArgs != null && slotExtractor.hasRequiredSalarySlots(effectiveToolArgs)) {
+            String toolName = "salary.comparePreview";
+            long startTime = System.currentTimeMillis();
+            ToolResult<Object> toolResult = compareSalaryPreview(sessionId, traceId, effectiveToolArgs);
+            long duration = System.currentTimeMillis() - startTime;
+            metricsService.recordToolCall(toolName, toolResult.success());
+            metricsService.recordToolCallDuration(toolName, duration, toolResult.success());
+            return new ToolExecutionResult(toolResult, toolName, null, false, null);
+        } else {
+            boolean toolArgsMissing = true;
+            String followUpPrompt = chatPromptService.buildFollowUpPrompt(route, effectiveToolArgs, "salary comparison",
+                    "employeeId=e-001&payPeriod=2026-03");
+            chatToolArgumentService.cachePending(sessionId, route, effectiveToolArgs, followUpPrompt);
+            return new ToolExecutionResult(null, null, null, toolArgsMissing, followUpPrompt);
+        }
+    }
+    
+    /**
+     * 执行政策相关工具。
+     * 
+     * @param ctx 请求上下文
+     * @param sessionId 会话ID
+     * @param traceId 跟踪ID
+     * @param route 路由类型
+     * @param text 用户输入文本
+     * @return 工具执行结果
+     */
+    private ToolExecutionResult executePolicyTool(RequestContext ctx, String sessionId, String traceId, String route, String text) {
+        String toolName = "policy.search";
+        long startTime = System.currentTimeMillis();
+        Object ragResult = rag.search(ctx.tenantId(), text, 5);
+        long duration = System.currentTimeMillis() - startTime;
+        metricsService.recordToolCall(toolName, true);
+        metricsService.recordToolCallDuration(toolName, duration, true);
+        return new ToolExecutionResult(null, null, ragResult, false, null);
+    }
+    
+    /**
+     * 执行政策RAG工具。
+     * 
+     * @param ctx 请求上下文
+     * @param text 用户输入文本
+     * @return 工具执行结果
+     */
+    private ToolExecutionResult executePolicyRagTool(RequestContext ctx, String text) {
+        String toolName = "policy.rag";
+        long startTime = System.currentTimeMillis();
+        Object ragResult = rag.search(ctx.tenantId(), text, 5);
+        long duration = System.currentTimeMillis() - startTime;
+        metricsService.recordToolCall(toolName, true);
+        metricsService.recordToolCallDuration(toolName, duration, true);
+        return new ToolExecutionResult(null, null, ragResult, false, null);
+    }
+    
+    /**
+     * 处理工具执行失败的情况。
+     * 
+     * @param ctx 请求上下文
+     * @param text 用户输入文本
+     * @param result 工具执行结果
+     * @return 处理后的工具执行结果
+     */
+    private ToolExecutionResult handleToolExecutionFailure(RequestContext ctx, String text, ToolExecutionResult result) {
+        if (result.isToolArgsMissing() || (result.getToolResult() != null && !result.getToolResult().success())) {
+            String toolName = "policy.fallback";
+            long startTime = System.currentTimeMillis();
+            Object ragResult = rag.search(ctx.tenantId(), text, 5);
+            long duration = System.currentTimeMillis() - startTime;
+            metricsService.recordToolCall(toolName, true);
+            metricsService.recordToolCallDuration(toolName, duration, true);
+            return new ToolExecutionResult(result.getToolResult(), result.getToolName(), ragResult, result.isToolArgsMissing(), result.getFollowUpPrompt());
+        }
+        return result;
     }
     
     /**
@@ -351,34 +492,49 @@ public class ChatApplicationService {
      * @return LLM生成的响应，如果LLM不可用则返回null
      */
     private String callLLM(RequestContext ctx, String text, String route, ToolExecutionResult toolExecutionResult, RouteDecisionDto routeDecision) {
+        // 打印 dashscope api-key 配置
+        String apiKey = env.getProperty("spring.ai.dashscope.api-key");
+        logger.info("spring.ai.dashscope.api-key: {}", apiKey);
+        logger.info("spring.ai.dashscope.api-key is blank: {}", apiKey == null || apiKey.isBlank());
+        logger.info("spring.ai.dashscope.api-key equals 'sk-placeholder': {}", "sk-placeholder".equals(apiKey));
+        
+        DashScopeChatService svc = dashScopeChatService.getIfAvailable();
+        logger.info("DashScopeChatService is available: {}", svc != null);
+        
+        if (svc == null) {
+            logger.warn("DashScopeChatService is not available. Check if ChatModel bean is registered and spring.ai.dashscope.api-key is configured.");
+            return null;
+        } else {
+            logger.info("DashScopeChatService is available, LLM is enabled.");
+        }
         String llmResult = null;
-        String dashKey = System.getenv("AIHR_DASHSCOPE_API_KEY");
-        if (dashKey != null && !dashKey.isBlank()) {
-            DashScopeChatService svc = dashScopeChatService.getIfAvailable();
-            if (svc != null) {
-                try {
-                    llmCallCounter.increment();
-                    ToolResult<Object> toolResult = toolExecutionResult.getToolResult();
-                    Object ragResult = toolExecutionResult.getRagResult();
-                    
-                    if (toolResult != null && toolResult.success()) {
-                        String summary = toolResultSummarizer.toSummary(toolResult.data(), route);
-                        llmResult = svc.chatWithToolContext(text, summary, route);
-                    } else if ("POLICY_RECOMMEND".equals(route) && ragResult instanceof PolicyRagService.SearchResult sr) {
-                        llmResult = svc.chat(chatPromptService.buildPolicySuggestionPrompt(text, sr));
-                    } else if ("COMPLIANCE_RISK".equals(route) && ragResult instanceof PolicyRagService.SearchResult sr) {
-                        llmResult = svc.chat(chatPromptService.buildCompliancePrompt(text, sr));
-                    } else if ("POLICY_RAG".equals(route) && ragResult instanceof PolicyRagService.SearchResult sr) {
-                        llmResult = svc.chat(chatPromptService.buildPolicyQaPrompt(text, sr));
-                    } else {
-                        llmResult = svc.chat(text);
-                    }
-                } catch (Exception e) {
-                    logger.error("LLM call failed: {}", e.getMessage(), e);
-                    errorCounter.increment();
-                    llmResult = null;
-                }
+        long startTime = System.currentTimeMillis();
+        boolean success = false;
+        try {
+            ToolResult<Object> toolResult = toolExecutionResult.getToolResult();
+            Object ragResult = toolExecutionResult.getRagResult();
+
+            if (toolResult != null && toolResult.success()) {
+                String summary = toolResultSummarizer.toSummary(toolResult.data(), route);
+                llmResult = svc.chatWithToolContext(text, summary, route);
+            } else if ("POLICY_RECOMMEND".equals(route) && ragResult instanceof PolicyRagService.SearchResult sr) {
+                llmResult = svc.chat(chatPromptService.buildPolicySuggestionPrompt(text, sr));
+            } else if ("COMPLIANCE_RISK".equals(route) && ragResult instanceof PolicyRagService.SearchResult sr) {
+                llmResult = svc.chat(chatPromptService.buildCompliancePrompt(text, sr));
+            } else if ("POLICY_RAG".equals(route) && ragResult instanceof PolicyRagService.SearchResult sr) {
+                llmResult = svc.chat(chatPromptService.buildPolicyQaPrompt(text, sr));
+            } else {
+                llmResult = svc.chat(text);
             }
+            success = true;
+        } catch (Exception e) {
+            logger.error("LLM call failed: {}", e.getMessage(), e);
+            metricsService.recordError("llm_call");
+            llmResult = null;
+        } finally {
+            long duration = System.currentTimeMillis() - startTime;
+            metricsService.recordLlmCall(success);
+            metricsService.recordLlmCallDuration(duration, success);
         }
         return llmResult;
     }
@@ -386,10 +542,12 @@ public class ChatApplicationService {
     private String buildFallbackReason(boolean llmAvailable, boolean toolArgsMissing, ToolResult<Object> toolResult) {
         String fallbackReason = null;
         if (!llmAvailable) {
-            String dashKey = System.getenv("AIHR_DASHSCOPE_API_KEY");
-            fallbackReason = dashKey == null || dashKey.isBlank()
-                    ? "LLM disabled because AIHR_DASHSCOPE_API_KEY is not configured."
-                    : "LLM is temporarily unavailable.";
+            if (dashScopeChatService.getIfAvailable() == null) {
+                fallbackReason =
+                        "LLM 未启用：请检查配置中心 ai-hr-ai-core 中的 spring.ai.dashscope.api-key，并确认运行环境未用空的环境变量覆盖该值。";
+            } else {
+                fallbackReason = "大模型调用失败或超时，已返回工具/检索结果摘要，可稍后重试。";
+            }
         }
         if (toolArgsMissing) {
             fallbackReason = mergeReason(fallbackReason, "Missing required tool arguments. Policy retrieval was used as fallback.");
@@ -658,7 +816,6 @@ public class ChatApplicationService {
         return out;
     }
 
-    @SuppressWarnings("unchecked")
     private Map<String, Long> lineAmountByCode(Object linesObj) {
         Map<String, Long> out = new LinkedHashMap<>();
         if (!(linesObj instanceof List<?> list)) {
@@ -699,3 +856,6 @@ public class ChatApplicationService {
     }
 
 }
+
+
+

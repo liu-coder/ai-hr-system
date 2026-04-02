@@ -37,3 +37,6 @@ public class SchedulingResponseDto {
         this.businessRequirementSatisfactionScore = businessRequirementSatisfactionScore;
     }
 }
+
+
+

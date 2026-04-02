@@ -11,3 +11,6 @@ public record ToolCallEvidenceDto(
         /** 工具返回结果（即 toolResult 本体） */
         Object result
 ) {}
+
+
+

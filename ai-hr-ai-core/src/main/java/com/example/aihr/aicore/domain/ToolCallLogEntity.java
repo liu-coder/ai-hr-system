@@ -56,3 +56,6 @@ public class ToolCallLogEntity {
     public void setCreatedAt(Instant createdAt) { this.createdAt = createdAt; }
 }
 
+
+
+

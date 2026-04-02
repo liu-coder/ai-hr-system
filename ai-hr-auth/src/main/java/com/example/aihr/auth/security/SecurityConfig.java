@@ -3,7 +3,6 @@ package com.example.aihr.auth.security;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -24,9 +23,10 @@ public class SecurityConfig {
         http.authorizeHttpRequests(reg -> reg
                 .requestMatchers("/actuator/**").permitAll()
                 .requestMatchers("/v1/auth/**").permitAll()
-                .anyRequest().authenticated()
+                .anyRequest().permitAll()
         );
-        http.httpBasic(Customizer.withDefaults());
+        http.httpBasic(httpBasic -> httpBasic.disable());
+        http.formLogin(form -> form.disable());
         return http.build();
     }
 }

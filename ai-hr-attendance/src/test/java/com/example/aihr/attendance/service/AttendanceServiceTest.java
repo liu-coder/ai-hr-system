@@ -11,6 +11,8 @@ import com.example.aihr.attendance.repo.AttendanceAnomalyRepository;
 import com.example.aihr.attendance.repo.AttendanceRecordRepository;
 import com.example.aihr.attendance.repo.AttendanceRuleSetRepository;
 import com.example.aihr.attendance.repo.AttendanceSnapshotRepository;
+import com.example.aihr.common.validation.InputValidator;
+import com.example.aihr.common.exception.AiHrBusinessException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -37,13 +39,15 @@ class AttendanceServiceTest {
     private AttendanceAnomalyRepository anomalies;
     @Mock
     private AttendanceRuleEngine ruleEngine;
+    @Mock
+    private InputValidator inputValidator;
 
     @InjectMocks
     private AttendanceService service;
 
     @BeforeEach
     void setUp() {
-        service = new AttendanceService(records, ruleSets, snapshots, anomalies, ruleEngine, new ObjectMapper());
+        service = new AttendanceService(records, ruleSets, snapshots, anomalies, ruleEngine, new ObjectMapper(), inputValidator);
     }
 
     @Test
@@ -62,6 +66,10 @@ class AttendanceServiceTest {
         record.setCheckOutAt(LocalDateTime.of(2026, 3, 3, 18, 30));
         record.setCreatedAt(Instant.now());
 
+        // Mock input validator
+        when(inputValidator.isValidTenantId("tenant-1")).thenReturn(true);
+        when(inputValidator.isValidEmployeeId("emp-1")).thenReturn(true);
+
         when(ruleSets.findActiveRuleSet("tenant-1", start)).thenReturn(Optional.of(ruleSet));
         when(records.findByTenantIdAndEmployeeIdAndWorkDateBetween("tenant-1", "emp-1", start, end))
                 .thenReturn(List.of(record));
@@ -77,5 +85,46 @@ class AttendanceServiceTest {
         assertEquals(start, snapshotCaptor.getValue().getPeriodStart());
         assertEquals(end, snapshotCaptor.getValue().getPeriodEnd());
         assertEquals("ars-1", result.ruleSetId());
+    }
+
+    @Test
+    void computeAnomaliesShouldThrowExceptionForInvalidTenantId() {
+        LocalDate start = LocalDate.of(2026, 3, 1);
+        LocalDate end = LocalDate.of(2026, 3, 31);
+
+        // Mock input validator to return false for tenantId
+        when(inputValidator.isValidTenantId("invalid-tenant")).thenReturn(false);
+
+        org.junit.jupiter.api.Assertions.assertThrows(AiHrBusinessException.class, () -> {
+            service.computeAnomalies("invalid-tenant", "emp-1", start, end, null);
+        });
+    }
+
+    @Test
+    void computeAnomaliesShouldThrowExceptionForInvalidEmployeeId() {
+        LocalDate start = LocalDate.of(2026, 3, 1);
+        LocalDate end = LocalDate.of(2026, 3, 31);
+
+        // Mock input validator
+        when(inputValidator.isValidTenantId("tenant-1")).thenReturn(true);
+        when(inputValidator.isValidEmployeeId("invalid-employee")).thenReturn(false);
+
+        org.junit.jupiter.api.Assertions.assertThrows(AiHrBusinessException.class, () -> {
+            service.computeAnomalies("tenant-1", "invalid-employee", start, end, null);
+        });
+    }
+
+    @Test
+    void computeAnomaliesShouldThrowExceptionForStartAfterEnd() {
+        LocalDate start = LocalDate.of(2026, 3, 31);
+        LocalDate end = LocalDate.of(2026, 3, 1);
+
+        // Mock input validator
+        when(inputValidator.isValidTenantId("tenant-1")).thenReturn(true);
+        when(inputValidator.isValidEmployeeId("emp-1")).thenReturn(true);
+
+        org.junit.jupiter.api.Assertions.assertThrows(AiHrBusinessException.class, () -> {
+            service.computeAnomalies("tenant-1", "emp-1", start, end, null);
+        });
     }
 }

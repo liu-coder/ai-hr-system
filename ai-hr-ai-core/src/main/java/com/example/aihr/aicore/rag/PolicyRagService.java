@@ -4,8 +4,11 @@ import com.example.aihr.aicore.milvus.MilvusProperties;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
-import java.util.Map;
+
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -17,6 +20,7 @@ public class PolicyRagService {
     private final EmbeddingService embedding;
     private final VectorStore vectorStore;
     private final MilvusProperties milvusProps;
+    private final ExecutorService executorService;
 
     public PolicyRagService(PolicyDocumentRepository docs,
                             PolicyChunkRepository chunks,
@@ -28,6 +32,7 @@ public class PolicyRagService {
         this.embedding = embedding;
         this.vectorStore = vectorStore;
         this.milvusProps = milvusProps;
+        this.executorService = Executors.newFixedThreadPool(5);
     }
 
     @Transactional
@@ -80,9 +85,16 @@ public class PolicyRagService {
             c.setCreatedAt(Instant.now());
             chunks.save(c);
 
-            // Best-effort upsert to Milvus (if available)
+            // Best-effort upsert to Milvus (if available) - asynchronous
             if (vectorStore.isAvailable()) {
-                vectorStore.upsert(tenantId, chunkId, vec);
+                CompletableFuture.runAsync(() -> {
+                    try {
+                        vectorStore.upsert(tenantId, chunkId, vec);
+                    } catch (Exception e) {
+                        // Log error but don't fail the ingest process
+                        System.err.println("Failed to upsert to Milvus: " + e.getMessage());
+                    }
+                }, executorService);
             }
         }
         return d.getId();
@@ -130,4 +142,7 @@ public class PolicyRagService {
     public record SearchResult(String query, boolean milvusAvailable, String milvusUri, List<Hit> hits) {}
     public record Hit(String chunkId, String documentId, int chunkIndex, String content, String metadataJson) {}
 }
+
+
+
 

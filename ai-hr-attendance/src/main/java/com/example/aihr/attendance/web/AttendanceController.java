@@ -3,6 +3,8 @@ package com.example.aihr.attendance.web;
 import com.example.aihr.attendance.service.AttendanceService;
 import com.example.aihr.attendance.web.dto.AnomalyResponseDto;
 import com.example.aihr.attendance.service.AuditService;
+import com.example.aihr.attendance.service.AttendanceMessageProducer;
+import com.example.aihr.attendance.constant.AttendanceConstants;
 import com.example.aihr.common.security.RequestContext;
 import com.example.aihr.common.security.RequestContextHolder;
 import jakarta.servlet.http.HttpServletRequest;
@@ -20,16 +22,20 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import java.util.ArrayList;
+import java.util.HashMap;
 
 @RestController
 @RequestMapping(path = "/v1/attendance", produces = MediaType.APPLICATION_JSON_VALUE)
 public class AttendanceController {
     private final AttendanceService attendance;
     private final AuditService audit;
+    private final AttendanceMessageProducer messageProducer;
 
-    public AttendanceController(AttendanceService attendance, AuditService audit) {
+    public AttendanceController(AttendanceService attendance, AuditService audit, AttendanceMessageProducer messageProducer) {
         this.attendance = attendance;
         this.audit = audit;
+        this.messageProducer = messageProducer;
     }
 
     /**
@@ -61,9 +67,9 @@ public class AttendanceController {
         audit.write(
                 tenantId,
                 userId,
-                "HUMAN",
-                "attendance.ruleset.create",
-                "AttendanceRuleSet",
+                AttendanceConstants.OPERATION_TYPE_HUMAN,
+                AttendanceConstants.AUDIT_OPERATION_RULESET_CREATE,
+                AttendanceConstants.ENTITY_TYPE_RULE_SET,
                 e.getId(),
                 http.getHeader("X-Trace-Id"),
                 Map.of("name", e.getName(), "version", e.getVersion())
@@ -99,9 +105,9 @@ public class AttendanceController {
         audit.write(
                 tenantId,
                 userId,
-                "HUMAN",
-                "attendance.record.upsert",
-                "AttendanceRecord",
+                AttendanceConstants.OPERATION_TYPE_HUMAN,
+                AttendanceConstants.AUDIT_OPERATION_RECORD_UPSERT,
+                AttendanceConstants.ENTITY_TYPE_RECORD,
                 e.getId(),
                 http.getHeader("X-Trace-Id"),
                 Map.of("employeeId", req.employeeId(), "workDate", req.workDate().toString())
@@ -111,39 +117,48 @@ public class AttendanceController {
     }
 
     /**
-     * 计算某段时间内某员工的考勤异常。
+     * 计算某段时间内某员工的考勤异常（异步处理）。
      *
      * @param req 请求体
      * @param http 用于读取 `X-Trace-Id`（审计日志关联用）
-     * @return `AttendanceService.ComputeResult`，包含快照ID与异常数量等信息
+     * @return `{ "taskId": "..." }`，返回任务ID
      */
     @PostMapping(path = "/anomalies/compute", consumes = MediaType.APPLICATION_JSON_VALUE)
-    public AttendanceService.ComputeResult compute(@Valid @RequestBody ComputeRequest req, HttpServletRequest http) {
+    public Map<String, Object> compute(@Valid @RequestBody ComputeRequest req, HttpServletRequest http) {
         RequestContext ctx = RequestContextHolder.getRequired();
         String tenantId = ctx.tenantId();
         String userId = ctx.userId();
 
-        AttendanceService.ComputeResult result =
-                attendance.computeAnomalies(tenantId, req.employeeId(), req.start(), req.end(), req.ruleSetId());
+        // 生成任务ID
+        String taskId = AttendanceConstants.TASK_ID_PREFIX + System.currentTimeMillis() + "-" + req.employeeId();
+
+        // 发送异步计算任务到消息队列
+        messageProducer.sendAnomalyComputeTask(
+                tenantId,
+                req.employeeId(),
+                req.start().toString(),
+                req.end().toString(),
+                req.ruleSetId()
+        );
 
         audit.write(
                 tenantId,
                 userId,
-                "HUMAN",
-                "attendance.anomaly.compute",
-                "AttendanceSnapshot",
-                result.snapshotId(),
+                AttendanceConstants.OPERATION_TYPE_HUMAN,
+                AttendanceConstants.AUDIT_OPERATION_ANOMALY_COMPUTE,
+                AttendanceConstants.ENTITY_TYPE_TASK,
+                taskId,
                 http.getHeader("X-Trace-Id"),
                 Map.of(
                         "employeeId", req.employeeId(),
                         "start", req.start(),
                         "end", req.end(),
-                        "ruleSetId", result.ruleSetId(),
-                        "anomaliesCreated", result.anomaliesCreated()
+                        "ruleSetId", req.ruleSetId(),
+                        "taskId", taskId
                 )
         );
 
-        return result;
+        return Map.of("taskId", taskId);
     }
 
     /**
@@ -158,15 +173,106 @@ public class AttendanceController {
      * 查询异常列表。返回结构中 ruleHit / evidence 为结构化对象，便于 AI 再解释与前端展示。
      */
     @GetMapping(path = "/anomalies")
-    public List<AnomalyResponseDto> listAnomalies(@RequestParam @NotBlank String employeeId,
-                                                   @RequestParam @NotNull LocalDate start,
-                                                   @RequestParam @NotNull LocalDate end) {
+    public List<AnomalyResponseDto> listAnomalies(@RequestParam("employeeId") @NotBlank String employeeId,
+                                                   @RequestParam("start") @NotNull LocalDate start,
+                                                   @RequestParam("end") @NotNull LocalDate end) {
         RequestContext ctx = RequestContextHolder.getRequired();
         String tenantId = ctx.tenantId();
 
         return attendance.listAnomalies(tenantId, employeeId, start, end).stream()
                 .map(attendance::toAnomalyResponse)
                 .toList();
+    }
+    
+    /**
+     * 移动端打卡API。
+     * @param req 移动端打卡请求
+     * @param http 用于读取 `X-Trace-Id`（审计日志关联用）
+     * @return `{ "id": "..." }`，其中 `id` 是记录ID
+     */
+    @PostMapping(path = "/mobile/checkin", consumes = MediaType.APPLICATION_JSON_VALUE)
+    public Map<String, Object> mobileCheckin(@Valid @RequestBody MobileCheckinRequest req, HttpServletRequest http) {
+        RequestContext ctx = RequestContextHolder.getRequired();
+        String tenantId = ctx.tenantId();
+        String userId = ctx.userId();
+
+        // 构建打卡记录
+        LocalDateTime checkInAt = null;
+        LocalDateTime checkOutAt = null;
+        if ("CHECKIN".equals(req.checkType())) {
+            checkInAt = req.checkTime();
+        } else if ("CHECKOUT".equals(req.checkType())) {
+            checkOutAt = req.checkTime();
+        }
+
+        // 构建原始载荷
+        Map<String, Object> rawPayload = new HashMap<>();
+        rawPayload.put("source", req.source());
+        rawPayload.put("deviceId", req.deviceId());
+        if ("GPS".equals(req.source())) {
+            rawPayload.put("latitude", req.latitude());
+            rawPayload.put("longitude", req.longitude());
+        } else if ("WIFI".equals(req.source())) {
+            rawPayload.put("wifiSsid", req.wifiSsid());
+        }
+
+        // 调用服务保存打卡记录
+        com.example.aihr.attendance.domain.AttendanceRecordEntity e = 
+                attendance.upsertRecord(
+                        tenantId,
+                        req.employeeId(),
+                        req.workDate(),
+                        checkInAt,
+                        checkOutAt,
+                        req.source(),
+                        rawPayload
+                );
+
+        // 记录审计日志
+        audit.write(
+                tenantId,
+                userId,
+                AttendanceConstants.OPERATION_TYPE_HUMAN,
+                AttendanceConstants.AUDIT_OPERATION_RECORD_UPSERT,
+                AttendanceConstants.ENTITY_TYPE_RECORD,
+                e.getId(),
+                http.getHeader("X-Trace-Id"),
+                Map.of("employeeId", req.employeeId(), "workDate", req.workDate().toString(), "checkType", req.checkType(), "source", req.source())
+        );
+
+        return Map.of("id", e.getId());
+    }
+    
+    /**
+     * 移动端考勤查询API。
+     * @param req 移动端考勤查询请求
+     * @return 考勤记录列表
+     */
+    @PostMapping(path = "/mobile/query", consumes = MediaType.APPLICATION_JSON_VALUE)
+    public MobileAttendanceQueryResponse mobileQuery(@Valid @RequestBody MobileAttendanceQueryRequest req) {
+        RequestContext ctx = RequestContextHolder.getRequired();
+        String tenantId = ctx.tenantId();
+
+        // 调用服务查询考勤记录
+        List<com.example.aihr.attendance.domain.AttendanceRecordEntity> records = 
+                attendance.findByTenantIdAndEmployeeIdAndWorkDateBetween(tenantId, req.employeeId(), req.startDate(), req.endDate());
+
+        // 转换为移动端响应格式
+        List<MobileAttendanceRecordDto> mobileRecords = new ArrayList<>();
+        for (var record : records) {
+            String status = "正常";
+            if (record.getCheckInAt() == null || record.getCheckOutAt() == null) {
+                status = "缺卡";
+            }
+            mobileRecords.add(new MobileAttendanceRecordDto(
+                    record.getWorkDate(),
+                    record.getCheckInAt(),
+                    record.getCheckOutAt(),
+                    status
+            ));
+        }
+
+        return new MobileAttendanceQueryResponse(req.employeeId(), mobileRecords);
     }
 
     /**
@@ -216,5 +322,67 @@ public class AttendanceController {
             /** 指定使用的规则集ID（可空：为空则按“start日期附近的当前生效规则集”选择） */
             String ruleSetId
     ) {}
+    
+    /**
+     * 移动端打卡请求体。
+     */
+    public record MobileCheckinRequest(
+            /** 员工ID（必填） */
+            @NotBlank String employeeId,
+            /** 工作日期（必填） */
+            @NotNull LocalDate workDate,
+            /** 打卡时间（必填） */
+            @NotNull LocalDateTime checkTime,
+            /** 打卡类型（必填：CHECKIN或CHECKOUT） */
+            @NotBlank String checkType,
+            /** 打卡来源（必填：GPS或WIFI） */
+            @NotBlank String source,
+            /** 纬度（GPS打卡时必填） */
+            Double latitude,
+            /** 经度（GPS打卡时必填） */
+            Double longitude,
+            /** Wi-Fi SSID（Wi-Fi打卡时必填） */
+            String wifiSsid,
+            /** 设备ID（必填） */
+            @NotBlank String deviceId
+    ) {}
+    
+    /**
+     * 移动端考勤查询请求体。
+     */
+    public record MobileAttendanceQueryRequest(
+            /** 员工ID（必填） */
+            @NotBlank String employeeId,
+            /** 查询开始日期（必填） */
+            @NotNull LocalDate startDate,
+            /** 查询结束日期（必填） */
+            @NotNull LocalDate endDate
+    ) {}
+    
+    /**
+     * 移动端考勤查询响应体。
+     */
+    public record MobileAttendanceQueryResponse(
+            /** 员工ID */
+            String employeeId,
+            /** 考勤记录列表 */
+            List<MobileAttendanceRecordDto> records
+    ) {}
+    
+    /**
+     * 移动端考勤记录DTO。
+     */
+    public record MobileAttendanceRecordDto(
+            /** 工作日期 */
+            LocalDate workDate,
+            /** 上班打卡时间 */
+            LocalDateTime checkInAt,
+            /** 下班打卡时间 */
+            LocalDateTime checkOutAt,
+            /** 打卡状态 */
+            String status
+    ) {}
 }
+
+
 

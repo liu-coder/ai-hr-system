@@ -45,7 +45,7 @@ public class SalaryPolicyDto {
     public static class ItemDef {
         private String itemCode;
         private String itemName;
-        /** INPUT=从 input 取；POLICY=从 policy 取；RATE=按 baseItem 金额 × rateBpsKey/10000；DERIVED_NET=应发-扣款-税 */
+        /** INPUT=从 input 取；POLICY=从 policy 取；RATE=按 baseItem 金额 × rateBpsKey/10000；DERIVED_NET=应发-扣款-税；SUM=汇总多个项目；FIXED=固定金额；CONDITIONAL=条件金额 */
         private String formulaType;
         private String inputKey;
         private String policyKey;
@@ -53,6 +53,16 @@ public class SalaryPolicyDto {
         private String rateBpsKey;
         /** 输出为负数（扣款/税） */
         private Boolean negate;
+        /** 用于SUM类型，要汇总的项目代码列表 */
+        private List<String> itemsToSum;
+        /** 用于FIXED类型，固定金额 */
+        private Long fixedAmount;
+        /** 用于CONDITIONAL类型，条件 */
+        private Condition condition;
+        /** 用于CONDITIONAL类型，条件为真时的金额 */
+        private Long trueAmount;
+        /** 用于CONDITIONAL类型，条件为假时的金额 */
+        private Long falseAmount;
 
         public String getItemCode() { return itemCode; }
         public void setItemCode(String itemCode) { this.itemCode = itemCode; }
@@ -70,5 +80,29 @@ public class SalaryPolicyDto {
         public void setRateBpsKey(String rateBpsKey) { this.rateBpsKey = rateBpsKey; }
         public Boolean getNegate() { return negate; }
         public void setNegate(Boolean negate) { this.negate = negate; }
+        public List<String> getItemsToSum() { return itemsToSum; }
+        public void setItemsToSum(List<String> itemsToSum) { this.itemsToSum = itemsToSum; }
+        public Long getFixedAmount() { return fixedAmount; }
+        public void setFixedAmount(Long fixedAmount) { this.fixedAmount = fixedAmount; }
+        public Condition getCondition() { return condition; }
+        public void setCondition(Condition condition) { this.condition = condition; }
+        public Long getTrueAmount() { return trueAmount; }
+        public void setTrueAmount(Long trueAmount) { this.trueAmount = trueAmount; }
+        public Long getFalseAmount() { return falseAmount; }
+        public void setFalseAmount(Long falseAmount) { this.falseAmount = falseAmount; }
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public static class Condition {
+        private String field;
+        private String op;
+        private String value;
+
+        public String getField() { return field; }
+        public void setField(String field) { this.field = field; }
+        public String getOp() { return op; }
+        public void setOp(String op) { this.op = op; }
+        public String getValue() { return value; }
+        public void setValue(String value) { this.value = value; }
     }
 }

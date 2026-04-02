@@ -24,11 +24,13 @@ Start-Service -Name "ai-hr-attendance" -JarPath "ai-hr-attendance\target\ai-hr-a
 Start-Service -Name "ai-hr-salary" -JarPath "ai-hr-salary\target\ai-hr-salary-0.1.0-SNAPSHOT.jar" -Port 9020
 # 4. AI-Core
 Start-Service -Name "ai-hr-ai-core" -JarPath "ai-hr-ai-core\target\ai-hr-ai-core-0.1.0-SNAPSHOT.jar" -Port 9030
-# 5. Gateway
+# 5. Integration
+Start-Service -Name "ai-hr-integration" -JarPath "ai-hr-integration\target\ai-hr-integration-0.1.0-SNAPSHOT.jar" -Port 8086
+# 6. Gateway
 Start-Service -Name "ai-hr-gateway" -JarPath "ai-hr-gateway\target\ai-hr-gateway-0.1.0-SNAPSHOT.jar" -Port 9100
 
 Write-Host ""
-Write-Host "All 5 processes started in new windows. Wait ~30s for Spring Boot to finish startup." -ForegroundColor Green
+Write-Host "All 6 processes started in new windows. Wait ~30s for Spring Boot to finish startup." -ForegroundColor Green
 Write-Host "Gateway: http://localhost:9100" -ForegroundColor Yellow
 Write-Host "Auth:    http://localhost:9101" -ForegroundColor Yellow
 Write-Host "Then: POST http://localhost:9100/v1/auth/token with body: {\"tenantId\":\"t-demo\",\"username\":\"admin\",\"password\":\"<your_password>\"}" -ForegroundColor Yellow

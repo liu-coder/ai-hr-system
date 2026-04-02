@@ -13,3 +13,6 @@ public class ServiceEndpointsProperties {
     public void setSalaryBaseUrl(String salaryBaseUrl) { this.salaryBaseUrl = salaryBaseUrl; }
 }
 
+
+
+

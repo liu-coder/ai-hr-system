@@ -10,9 +10,14 @@ import com.example.aihr.aicore.web.dto.WorkHourPredictionRequestDto;
 import com.example.aihr.aicore.web.dto.WorkHourPredictionResponseDto;
 import com.example.aihr.aicore.web.dto.SchedulingShiftDto;
 import com.example.aihr.aicore.web.dto.AttendanceAnomalyDto;
-import com.example.aihr.aicore.web.dto.LeaveApprovalDto;
-import com.example.aihr.aicore.web.dto.WorkHourPredictionDto;
+
 import com.example.aihr.aicore.web.dto.WorkHourForecastDto;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.Gauge;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Timer;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 
 import java.time.DayOfWeek;
@@ -23,27 +28,254 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
- * 考勤AI服务实现类，提供智能排班优化、异常打卡检测、智能请假管理和工时预测分析功能。
+ * 考勤AI服务实现类
+ * 
+ * 设计原理：
+ * 1. 采用模块化设计，将考勤AI功能分为智能排班、异常检测、请假管理和工时预测四个核心模块
+ * 2. 基于规则引擎和统计分析相结合的方法，实现智能化的考勤管理
+ * 3. 考虑多维度因素（如员工技能、偏好、业务需求等）进行综合决策
+ * 4. 提供量化的评估指标，如员工满意度、工作负载平衡度等
+ * 
+ * 目标：
+ * 1. 提高考勤管理的自动化和智能化水平
+ * 2. 优化排班方案，提高员工满意度和工作效率
+ * 3. 及时检测和预警异常考勤行为
+ * 4. 预测工时需求，合理规划人力资源
  */
 @Service
 public class AttendanceAIServiceImpl implements AttendanceAIService {
+    
+    // 配置参数
+    @Value("${attendance.anomaly.location.threshold:0.5}")
+    private double locationAnomalyThreshold; // 位置异常阈值（公里）
+    
+    @Value("${attendance.anomaly.consecutive.checkin.minutes:30}")
+    private int consecutiveCheckinMinutes; // 连续打卡最小间隔（分钟）
+    
+    @Value("${attendance.anomaly.late.threshold:30}")
+    private int lateThreshold; // 迟到阈值（分钟）
+    
+    @Value("${attendance.anomaly.early.threshold:30}")
+    private int earlyThreshold; // 早退阈值（分钟）
+    
+    @Value("${attendance.anomaly.time.range.start:6}")
+    private int unusualTimeStart; // 异常时间开始（小时）
+    
+    @Value("${attendance.anomaly.time.range.end:22}")
+    private int unusualTimeEnd; // 异常时间结束（小时）
+    
+    // Redis缓存
+    private final RedisTemplate<String, Object> redisTemplate;
+    
+    // 内存缓存（作为Redis的fallback）
+    private final ConcurrentHashMap<String, Map<String, List<String>>> employeeSkillsCache = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, Map<String, Map<DayOfWeek, Integer>>> employeePreferencesCache = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, Map<LocalDate, Integer>> businessDemandCache = new ConcurrentHashMap<>();
+    
+    // 缓存过期时间（秒）
+    private static final long CACHE_EXPIRATION_SECONDS = 3600; // 1小时
+    
+    // 监控指标
+    private final Timer schedulingTimer;
+    private final Timer anomalyDetectionTimer;
+    private final Timer leaveApprovalTimer;
+    private final Timer workHourPredictionTimer;
+    
+    private final Counter redisCacheHitCounter;
+    private final Counter redisCacheMissCounter;
+    private final Counter memoryCacheHitCounter;
+    private final Counter memoryCacheMissCounter;
+    
+    private final Counter anomalyCounter;
+    private final Counter highRiskAnomalyCounter;
+    private final Counter mediumRiskAnomalyCounter;
+    private final Counter lowRiskAnomalyCounter;
+    
+    private final AtomicLong redisCacheSize;
+    private final AtomicLong memoryCacheSize;
+    
+    // 构造函数注入RedisTemplate和MeterRegistry
+    public AttendanceAIServiceImpl(RedisTemplate<String, Object> redisTemplate, MeterRegistry meterRegistry) {
+        if (redisTemplate == null) {
+            throw new IllegalArgumentException("RedisTemplate不能为null");
+        }
+        this.redisTemplate = redisTemplate;
+        
+        // 初始化监控指标
+        if (meterRegistry != null) {
+            this.schedulingTimer = Timer.builder("attendance.ai.scheduling.duration")
+                    .description("Time taken to optimize scheduling")
+                    .register(meterRegistry);
+            
+            this.anomalyDetectionTimer = Timer.builder("attendance.ai.anomaly.detection.duration")
+                    .description("Time taken to detect anomalies")
+                    .register(meterRegistry);
+            
+            this.leaveApprovalTimer = Timer.builder("attendance.ai.leave.approval.duration")
+                    .description("Time taken to approve leave")
+                    .register(meterRegistry);
+            
+            this.workHourPredictionTimer = Timer.builder("attendance.ai.work.hour.prediction.duration")
+                    .description("Time taken to predict work hours")
+                    .register(meterRegistry);
+            
+            this.redisCacheHitCounter = Counter.builder("attendance.ai.cache.redis.hit")
+                    .description("Redis cache hits")
+                    .register(meterRegistry);
+            
+            this.redisCacheMissCounter = Counter.builder("attendance.ai.cache.redis.miss")
+                    .description("Redis cache misses")
+                    .register(meterRegistry);
+            
+            this.memoryCacheHitCounter = Counter.builder("attendance.ai.cache.memory.hit")
+                    .description("Memory cache hits")
+                    .register(meterRegistry);
+            
+            this.memoryCacheMissCounter = Counter.builder("attendance.ai.cache.memory.miss")
+                    .description("Memory cache misses")
+                    .register(meterRegistry);
+            
+            this.anomalyCounter = Counter.builder("attendance.ai.anomaly.total")
+                    .description("Total anomalies detected")
+                    .register(meterRegistry);
+            
+            this.highRiskAnomalyCounter = Counter.builder("attendance.ai.anomaly.high.risk")
+                    .description("High risk anomalies detected")
+                    .register(meterRegistry);
+            
+            this.mediumRiskAnomalyCounter = Counter.builder("attendance.ai.anomaly.medium.risk")
+                    .description("Medium risk anomalies detected")
+                    .register(meterRegistry);
+            
+            this.lowRiskAnomalyCounter = Counter.builder("attendance.ai.anomaly.low.risk")
+                    .description("Low risk anomalies detected")
+                    .register(meterRegistry);
+            
+            this.redisCacheSize = new AtomicLong(0);
+            Gauge.builder("attendance.ai.cache.redis.size", this.redisCacheSize, AtomicLong::get)
+                    .description("Redis cache size")
+                    .register(meterRegistry);
+            
+            this.memoryCacheSize = new AtomicLong(0);
+            Gauge.builder("attendance.ai.cache.memory.size", this.memoryCacheSize, AtomicLong::get)
+                    .description("Memory cache size")
+                    .register(meterRegistry);
+        } else {
+            // 测试环境下的默认值
+            this.schedulingTimer = null;
+            this.anomalyDetectionTimer = null;
+            this.leaveApprovalTimer = null;
+            this.workHourPredictionTimer = null;
+            this.redisCacheHitCounter = null;
+            this.redisCacheMissCounter = null;
+            this.memoryCacheHitCounter = null;
+            this.memoryCacheMissCounter = null;
+            this.anomalyCounter = null;
+            this.highRiskAnomalyCounter = null;
+            this.mediumRiskAnomalyCounter = null;
+            this.lowRiskAnomalyCounter = null;
+            this.redisCacheSize = new AtomicLong(0);
+            this.memoryCacheSize = new AtomicLong(0);
+        }
+    }
 
+    /**
+     * 智能排班优化
+     * 
+     * 设计原理：
+     * 1. 基于多维度因素进行排班决策，包括员工技能、偏好、业务需求等
+     * 2. 采用贪心算法，优先选择技能匹配度高且偏好度高的员工
+     * 3. 考虑员工连续工作天数和休息时间等约束条件
+     * 4. 提供量化的评估指标，评估排班方案的质量
+     * 
+     * 实现思路：
+     * 1. 模拟员工技能和偏好数据
+     * 2. 模拟业务需求波动
+     * 3. 为每个日期生成排班，考虑连续工作天数和休息时间约束
+     * 4. 根据技能匹配度和偏好排序员工
+     * 5. 计算员工满意度、工作负载平衡度和业务需求满足度
+     * 
+     * 目标：
+     * 1. 生成最优的排班方案，满足业务需求
+     * 2. 提高员工满意度，减少员工抱怨
+     * 3. 平衡工作负载，避免个别员工过度劳累
+     * 4. 提高排班效率，减少人工排班的时间和精力
+     * 
+     * @param tenantId 租户ID
+     * @param request 排班请求，包含员工ID列表、开始和结束日期、工作时间、技能要求等
+     * @return 排班响应，包含排班方案和评估指标
+     */
     @Override
-    public SchedulingResponseDto optimizeScheduling(SchedulingRequestDto request) {
-        // 这里实现智能排班优化逻辑
+    public SchedulingResponseDto optimizeScheduling(String tenantId, SchedulingRequestDto request) {
+        if (schedulingTimer != null) {
+            return schedulingTimer.record(() -> {
+                return doOptimizeScheduling(tenantId, request);
+            });
+        } else {
+            return doOptimizeScheduling(tenantId, request);
+        }
+    }
+    
+    private SchedulingResponseDto doOptimizeScheduling(String tenantId, SchedulingRequestDto request) {
         // 1. 收集历史排班数据、员工技能和偏好、业务需求
-        // 2. 使用机器学习模型生成最优排班方案
-        // 3. 评估排班方案的工作负载平衡、员工满意度等指标
+        Map<String, List<String>> employeeSkills = initializeEmployeeSkills(tenantId, request.getEmployeeIds());
+        Map<String, Map<DayOfWeek, Integer>> employeePreferences = initializeEmployeePreferences(tenantId, request.getEmployeeIds());
+        Map<LocalDate, Integer> businessDemand = initializeBusinessDemand(request.getStartDate(), request.getEndDate());
         
-        // 模拟员工技能和偏好数据
+        // 2. 生成排班方案
+        List<SchedulingShiftDto> shifts = generateSchedulingShifts(request, employeeSkills, employeePreferences, businessDemand);
+        
+        // 3. 评估排班方案
+        double employeeSatisfactionScore = calculateEmployeeSatisfaction(shifts, employeePreferences);
+        double workloadBalanceScore = calculateWorkloadBalance(shifts, request.getEmployeeIds());
+        double businessRequirementSatisfactionScore = calculateBusinessRequirementSatisfaction(shifts, businessDemand);
+        
+        // 4. 构建响应
+        return buildSchedulingResponse(shifts, employeeSatisfactionScore, workloadBalanceScore, businessRequirementSatisfactionScore);
+    }
+    
+    /**
+     * 初始化员工技能数据
+     */
+    private Map<String, List<String>> initializeEmployeeSkills(String tenantId, List<String> employeeIds) {
+        String cacheKey = "employee_skills:" + tenantId;
+        
+        // 尝试从Redis获取
+        try {
+            Map<String, List<String>> cachedSkills = (Map<String, List<String>>) redisTemplate.opsForValue().get(cacheKey);
+            if (cachedSkills != null) {
+                if (redisCacheHitCounter != null) {
+                    redisCacheHitCounter.increment();
+                }
+                return cachedSkills;
+            }
+        } catch (Exception e) {
+            // Redis失败，使用内存缓存
+        }
+        if (redisCacheMissCounter != null) {
+            redisCacheMissCounter.increment();
+        }
+        
+        // 尝试从内存缓存获取
+        Map<String, List<String>> cachedSkills = employeeSkillsCache.get(tenantId);
+        if (cachedSkills != null) {
+            if (memoryCacheHitCounter != null) {
+                memoryCacheHitCounter.increment();
+            }
+            return cachedSkills;
+        }
+        if (memoryCacheMissCounter != null) {
+            memoryCacheMissCounter.increment();
+        }
+        
+        // 模拟员工技能数据
         Map<String, List<String>> employeeSkills = new HashMap<>();
-        Map<String, Map<DayOfWeek, Integer>> employeePreferences = new HashMap<>();
-        
-        // 初始化员工技能和偏好
-        for (String employeeId : request.getEmployeeIds()) {
-            // 模拟员工技能
+        for (String employeeId : employeeIds) {
             List<String> skills = new ArrayList<>();
             if (Math.random() > 0.5) {
                 skills.add("customer_service");
@@ -55,8 +287,51 @@ public class AttendanceAIServiceImpl implements AttendanceAIService {
                 skills.add("management");
             }
             employeeSkills.put(employeeId, skills);
-            
-            // 模拟员工偏好（1-5，5表示最偏好）
+        }
+        
+        // 缓存到Redis
+        try {
+            redisTemplate.opsForValue().set(cacheKey, employeeSkills, CACHE_EXPIRATION_SECONDS, TimeUnit.SECONDS);
+            if (redisCacheSize != null) {
+                redisCacheSize.incrementAndGet();
+            }
+        } catch (Exception e) {
+            // Redis失败，只缓存到内存
+        }
+        
+        // 缓存到内存
+        employeeSkillsCache.put(tenantId, employeeSkills);
+        if (memoryCacheSize != null) {
+            memoryCacheSize.incrementAndGet();
+        }
+        return employeeSkills;
+    }
+    
+    /**
+     * 初始化员工偏好数据
+     */
+    private Map<String, Map<DayOfWeek, Integer>> initializeEmployeePreferences(String tenantId, List<String> employeeIds) {
+        String cacheKey = "employee_preferences:" + tenantId;
+        
+        // 尝试从Redis获取
+        try {
+            Map<String, Map<DayOfWeek, Integer>> cachedPreferences = (Map<String, Map<DayOfWeek, Integer>>) redisTemplate.opsForValue().get(cacheKey);
+            if (cachedPreferences != null) {
+                return cachedPreferences;
+            }
+        } catch (Exception e) {
+            // Redis失败，使用内存缓存
+        }
+        
+        // 尝试从内存缓存获取
+        Map<String, Map<DayOfWeek, Integer>> cachedPreferences = employeePreferencesCache.get(tenantId);
+        if (cachedPreferences != null) {
+            return cachedPreferences;
+        }
+        
+        // 模拟员工偏好数据
+        Map<String, Map<DayOfWeek, Integer>> employeePreferences = new HashMap<>();
+        for (String employeeId : employeeIds) {
             Map<DayOfWeek, Integer> preferences = new HashMap<>();
             for (DayOfWeek day : DayOfWeek.values()) {
                 preferences.put(day, (int) (Math.random() * 5) + 1);
@@ -64,9 +339,44 @@ public class AttendanceAIServiceImpl implements AttendanceAIService {
             employeePreferences.put(employeeId, preferences);
         }
         
+        // 缓存到Redis
+        try {
+            redisTemplate.opsForValue().set(cacheKey, employeePreferences, CACHE_EXPIRATION_SECONDS, TimeUnit.SECONDS);
+        } catch (Exception e) {
+            // Redis失败，只缓存到内存
+        }
+        
+        // 缓存到内存
+        employeePreferencesCache.put(tenantId, employeePreferences);
+        return employeePreferences;
+    }
+    
+    /**
+     * 初始化业务需求数据
+     */
+    private Map<LocalDate, Integer> initializeBusinessDemand(LocalDate startDate, LocalDate endDate) {
+        String cacheKey = "business_demand:" + startDate + "_" + endDate;
+        
+        // 尝试从Redis获取
+        try {
+            Map<LocalDate, Integer> cachedDemand = (Map<LocalDate, Integer>) redisTemplate.opsForValue().get(cacheKey);
+            if (cachedDemand != null) {
+                return cachedDemand;
+            }
+        } catch (Exception e) {
+            // Redis失败，使用内存缓存
+        }
+        
+        // 尝试从内存缓存获取
+        String memoryCacheKey = startDate + "_" + endDate;
+        Map<LocalDate, Integer> cachedDemand = businessDemandCache.get(memoryCacheKey);
+        if (cachedDemand != null) {
+            return cachedDemand;
+        }
+        
         // 模拟业务需求波动
         Map<LocalDate, Integer> businessDemand = new HashMap<>();
-        for (LocalDate date = request.getStartDate(); !date.isAfter(request.getEndDate()); date = date.plusDays(1)) {
+        for (LocalDate date = startDate; !date.isAfter(endDate); date = date.plusDays(1)) {
             // 基础需求
             int baseDemand = 2;
             // 周末需求较低
@@ -82,7 +392,25 @@ public class AttendanceAIServiceImpl implements AttendanceAIService {
             businessDemand.put(date, baseDemand);
         }
         
-        // 生成排班方案
+        // 缓存到Redis
+        try {
+            redisTemplate.opsForValue().set(cacheKey, businessDemand, CACHE_EXPIRATION_SECONDS, TimeUnit.SECONDS);
+        } catch (Exception e) {
+            // Redis失败，只缓存到内存
+        }
+        
+        // 缓存到内存
+        businessDemandCache.put(memoryCacheKey, businessDemand);
+        return businessDemand;
+    }
+    
+    /**
+     * 生成排班方案
+     */
+    private List<SchedulingShiftDto> generateSchedulingShifts(SchedulingRequestDto request, 
+                                                           Map<String, List<String>> employeeSkills, 
+                                                           Map<String, Map<DayOfWeek, Integer>> employeePreferences, 
+                                                           Map<LocalDate, Integer> businessDemand) {
         List<SchedulingShiftDto> shifts = new ArrayList<>();
         Map<String, Integer> consecutiveWorkingDays = new HashMap<>();
         Map<String, LocalDateTime> lastShiftEndTime = new HashMap<>();
@@ -160,21 +488,21 @@ public class AttendanceAIServiceImpl implements AttendanceAIService {
             currentDate = currentDate.plusDays(1);
         }
         
-        // 计算员工满意度
-        double employeeSatisfactionScore = calculateEmployeeSatisfaction(shifts, employeePreferences);
-        
-        // 计算工作负载平衡
-        double workloadBalanceScore = calculateWorkloadBalance(shifts, request.getEmployeeIds());
-        
-        // 计算业务需求满足度
-        double businessRequirementSatisfactionScore = calculateBusinessRequirementSatisfaction(shifts, businessDemand);
-        
+        return shifts;
+    }
+    
+    /**
+     * 构建排班响应
+     */
+    private SchedulingResponseDto buildSchedulingResponse(List<SchedulingShiftDto> shifts, 
+                                                       double employeeSatisfactionScore, 
+                                                       double workloadBalanceScore, 
+                                                       double businessRequirementSatisfactionScore) {
         SchedulingResponseDto response = new SchedulingResponseDto();
         response.setShifts(shifts);
         response.setEmployeeSatisfactionScore(employeeSatisfactionScore);
         response.setWorkloadBalanceScore(workloadBalanceScore);
         response.setBusinessRequirementSatisfactionScore(businessRequirementSatisfactionScore);
-        
         return response;
     }
     
@@ -266,9 +594,43 @@ public class AttendanceAIServiceImpl implements AttendanceAIService {
         return totalSatisfaction / businessDemand.size();
     }
 
+    /**
+     * 异常打卡检测
+     * 
+     * 设计原理：
+     * 1. 基于多维度数据进行异常检测，包括时间、地点、设备等
+     * 2. 采用规则引擎和统计分析相结合的方法
+     * 3. 根据异常的严重程度，划分不同的风险等级
+     * 4. 提供详细的异常证据，便于人工审核
+     * 
+     * 实现思路：
+     * 1. 按员工分组处理打卡记录
+     * 2. 分析每条打卡记录，检测迟到/早退、深夜打卡、连续打卡、地点异常、替打卡等
+     * 3. 根据异常的严重程度，确定风险等级
+     * 4. 生成异常检测报告，包括异常数量和风险等级分布
+     * 
+     * 目标：
+     * 1. 及时检测和预警异常考勤行为
+     * 2. 减少考勤作弊行为，提高考勤数据的真实性
+     * 3. 为管理者提供决策支持，及时发现和处理考勤问题
+     * 4. 提高考勤管理的自动化水平，减少人工审核的工作量
+     * 
+     * @param tenantId 租户ID
+     * @param request 异常检测请求，包含打卡记录、工作时间、办公室位置等
+     * @return 异常检测响应，包含异常列表和风险等级分布
+     */
     @Override
-    public AttendanceAnomalyDetectionResponseDto detectAnomalies(AttendanceAnomalyDetectionRequestDto request) {
-        // 这里实现异常打卡检测逻辑
+    public AttendanceAnomalyDetectionResponseDto detectAnomalies(String tenantId, AttendanceAnomalyDetectionRequestDto request) {
+        if (anomalyDetectionTimer != null) {
+            return anomalyDetectionTimer.record(() -> {
+                return doDetectAnomalies(tenantId, request);
+            });
+        } else {
+            return doDetectAnomalies(tenantId, request);
+        }
+    }
+    
+    private AttendanceAnomalyDetectionResponseDto doDetectAnomalies(String tenantId, AttendanceAnomalyDetectionRequestDto request) {
         // 1. 收集多维度打卡数据
         // 2. 提取特征并使用机器学习模型检测异常
         // 3. 评估风险等级并生成预警
@@ -277,53 +639,110 @@ public class AttendanceAIServiceImpl implements AttendanceAIService {
         List<AttendanceAnomalyDto> anomalies = new ArrayList<>();
         
         // 按员工分组处理打卡记录
-        Map<String, List<AttendanceAnomalyDetectionRequestDto.AttendanceRecordDto>> employeeRecords = new HashMap<>();
-        for (var record : request.getAttendanceRecords()) {
-            employeeRecords.computeIfAbsent(record.getEmployeeId(), k -> new ArrayList<>()).add(record);
-        }
+        Map<String, List<AttendanceAnomalyDetectionRequestDto.AttendanceRecordDto>> employeeRecords = groupRecordsByEmployee(request.getAttendanceRecords());
         
         // 对每个员工的打卡记录进行分析
         for (Map.Entry<String, List<AttendanceAnomalyDetectionRequestDto.AttendanceRecordDto>> entry : employeeRecords.entrySet()) {
-            String employeeId = entry.getKey();
             List<AttendanceAnomalyDetectionRequestDto.AttendanceRecordDto> records = entry.getValue();
             
             // 按日期排序
             records.sort((r1, r2) -> r1.getCheckInAt().compareTo(r2.getCheckInAt()));
             
             // 分析每条打卡记录
-            for (int i = 0; i < records.size(); i++) {
-                var record = records.get(i);
-                
-                // 1. 检测迟到/早退
-                detectLateEarly(record, request.getWorkHours(), anomalies);
-                
-                // 2. 检测打卡时间异常（如深夜打卡）
-                detectTimeAnomaly(record, anomalies);
-                
-                // 3. 检测连续打卡（短时间内多次打卡）
-                if (i > 0) {
-                    var previousRecord = records.get(i - 1);
-                    detectConsecutiveCheckins(record, previousRecord, anomalies);
-                }
-                
-                // 4. 检测打卡地点异常
-                detectLocationAnomaly(record, request.getOfficeLocation(), anomalies);
-                
-                // 5. 检测替打卡（不同设备或IP地址）
-                if (i > 0) {
-                    var previousRecord = records.get(i - 1);
-                    detectProxyCheckin(record, previousRecord, anomalies);
-                }
-            }
+            analyzeAttendanceRecords(records, request.getWorkHours(), request.getOfficeLocation(), anomalies);
         }
         
+        // 记录异常检测指标
+        recordAnomalyMetrics(anomalies);
+        
+        // 构建响应
+        return buildAnomalyDetectionResponse(anomalies);
+    }
+    
+    /**
+     * 记录异常检测指标
+     */
+    private void recordAnomalyMetrics(List<AttendanceAnomalyDto> anomalies) {
+        if (anomalyCounter != null) {
+            anomalyCounter.increment(anomalies.size());
+        }
+        
+        for (AttendanceAnomalyDto anomaly : anomalies) {
+            switch (anomaly.getRiskLevel()) {
+                case "HIGH":
+                    if (highRiskAnomalyCounter != null) {
+                        highRiskAnomalyCounter.increment();
+                    }
+                    break;
+                case "MEDIUM":
+                    if (mediumRiskAnomalyCounter != null) {
+                        mediumRiskAnomalyCounter.increment();
+                    }
+                    break;
+                case "LOW":
+                    if (lowRiskAnomalyCounter != null) {
+                        lowRiskAnomalyCounter.increment();
+                    }
+                    break;
+            }
+        }
+    }
+    
+    /**
+     * 按员工分组打卡记录
+     */
+    private Map<String, List<AttendanceAnomalyDetectionRequestDto.AttendanceRecordDto>> groupRecordsByEmployee(
+            List<AttendanceAnomalyDetectionRequestDto.AttendanceRecordDto> records) {
+        Map<String, List<AttendanceAnomalyDetectionRequestDto.AttendanceRecordDto>> employeeRecords = new HashMap<>();
+        for (var record : records) {
+            employeeRecords.computeIfAbsent(record.getEmployeeId(), k -> new ArrayList<>()).add(record);
+        }
+        return employeeRecords;
+    }
+    
+    /**
+     * 分析打卡记录，检测异常
+     */
+    private void analyzeAttendanceRecords(List<AttendanceAnomalyDetectionRequestDto.AttendanceRecordDto> records, 
+                                        AttendanceAnomalyDetectionRequestDto.WorkHoursDto workHours, 
+                                        AttendanceAnomalyDetectionRequestDto.LocationDto officeLocation, 
+                                        List<AttendanceAnomalyDto> anomalies) {
+        for (int i = 0; i < records.size(); i++) {
+            var record = records.get(i);
+            
+            // 1. 检测迟到/早退
+            detectLateEarly(record, workHours, anomalies);
+            
+            // 2. 检测打卡时间异常（如深夜打卡）
+            detectTimeAnomaly(record, anomalies);
+            
+            // 3. 检测连续打卡（短时间内多次打卡）
+            if (i > 0) {
+                var previousRecord = records.get(i - 1);
+                detectConsecutiveCheckins(record, previousRecord, anomalies);
+            }
+            
+            // 4. 检测打卡地点异常
+            detectLocationAnomaly(record, officeLocation, anomalies);
+            
+            // 5. 检测替打卡（不同设备或IP地址）
+            if (i > 0) {
+                var previousRecord = records.get(i - 1);
+                detectProxyCheckin(record, previousRecord, anomalies);
+            }
+        }
+    }
+    
+    /**
+     * 构建异常检测响应
+     */
+    private AttendanceAnomalyDetectionResponseDto buildAnomalyDetectionResponse(List<AttendanceAnomalyDto> anomalies) {
         AttendanceAnomalyDetectionResponseDto response = new AttendanceAnomalyDetectionResponseDto();
         response.setAnomalies(anomalies);
         response.setTotalAnomalies(anomalies.size());
         response.setHighRiskAnomalies((int) anomalies.stream().filter(a -> "HIGH".equals(a.getRiskLevel())).count());
         response.setMediumRiskAnomalies((int) anomalies.stream().filter(a -> "MEDIUM".equals(a.getRiskLevel())).count());
         response.setLowRiskAnomalies((int) anomalies.stream().filter(a -> "LOW".equals(a.getRiskLevel())).count());
-        
         return response;
     }
     
@@ -347,7 +766,7 @@ public class AttendanceAIServiceImpl implements AttendanceAIService {
             // 根据迟到时间确定风险等级
             if (lateMinutes > 60) {
                 anomaly.setRiskLevel("HIGH");
-            } else if (lateMinutes > 30) {
+            } else if (lateMinutes > lateThreshold) {
                 anomaly.setRiskLevel("MEDIUM");
             } else {
                 anomaly.setRiskLevel("LOW");
@@ -375,7 +794,7 @@ public class AttendanceAIServiceImpl implements AttendanceAIService {
             // 根据早退时间确定风险等级
             if (earlyMinutes > 60) {
                 anomaly.setRiskLevel("HIGH");
-            } else if (earlyMinutes > 30) {
+            } else if (earlyMinutes > earlyThreshold) {
                 anomaly.setRiskLevel("MEDIUM");
             } else {
                 anomaly.setRiskLevel("LOW");
@@ -398,24 +817,24 @@ public class AttendanceAIServiceImpl implements AttendanceAIService {
         int checkInHour = record.getCheckInAt().getHour();
         int checkOutHour = record.getCheckOutAt().getHour();
         
-        // 检测深夜打卡（22:00 - 6:00）
-        if (checkInHour >= 22 || checkInHour < 6) {
+        // 检测异常时间打卡
+        if (checkInHour >= unusualTimeEnd || checkInHour < unusualTimeStart) {
             AttendanceAnomalyDto anomaly = new AttendanceAnomalyDto();
             anomaly.setEmployeeId(record.getEmployeeId());
             anomaly.setDate(record.getWorkDate());
             anomaly.setAnomalyType("UNUSUAL_TIME_CHECKIN");
-            anomaly.setDescription("深夜打卡");
+            anomaly.setDescription("异常时间打卡");
             anomaly.setRiskLevel("MEDIUM");
             anomaly.setEvidence(Map.of("checkInTime", record.getCheckInAt().toString()));
             anomalies.add(anomaly);
         }
         
-        if (checkOutHour >= 22 || checkOutHour < 6) {
+        if (checkOutHour >= unusualTimeEnd || checkOutHour < unusualTimeStart) {
             AttendanceAnomalyDto anomaly = new AttendanceAnomalyDto();
             anomaly.setEmployeeId(record.getEmployeeId());
             anomaly.setDate(record.getWorkDate());
             anomaly.setAnomalyType("UNUSUAL_TIME_CHECKOUT");
-            anomaly.setDescription("深夜下班");
+            anomaly.setDescription("异常时间下班");
             anomaly.setRiskLevel("MEDIUM");
             anomaly.setEvidence(Map.of("checkOutTime", record.getCheckOutAt().toString()));
             anomalies.add(anomaly);
@@ -432,8 +851,8 @@ public class AttendanceAIServiceImpl implements AttendanceAIService {
         Duration duration = Duration.between(previous.getCheckInAt(), current.getCheckInAt());
         long minutesBetween = duration.toMinutes();
         
-        // 如果两次打卡间隔小于30分钟，视为连续打卡
-        if (minutesBetween < 30) {
+        // 如果两次打卡间隔小于设定值，视为连续打卡
+        if (minutesBetween < consecutiveCheckinMinutes) {
             AttendanceAnomalyDto anomaly = new AttendanceAnomalyDto();
             anomaly.setEmployeeId(current.getEmployeeId());
             anomaly.setDate(current.getWorkDate());
@@ -465,8 +884,8 @@ public class AttendanceAIServiceImpl implements AttendanceAIService {
                 officeLocation.getLatitude(), officeLocation.getLongitude()
         );
         
-        // 如果距离超过500米，视为异常地点
-        if (distance > 0.5) { // 0.5公里
+        // 如果距离超过设定阈值，视为异常地点
+        if (distance > locationAnomalyThreshold) {
             AttendanceAnomalyDto anomaly = new AttendanceAnomalyDto();
             anomaly.setEmployeeId(record.getEmployeeId());
             anomaly.setDate(record.getWorkDate());
@@ -474,7 +893,7 @@ public class AttendanceAIServiceImpl implements AttendanceAIService {
             anomaly.setDescription("打卡地点异常");
             
             // 根据距离确定风险等级
-            if (distance > 5.0) { // 5公里
+            if (distance > locationAnomalyThreshold * 10) { // 10倍阈值
                 anomaly.setRiskLevel("HIGH");
             } else {
                 anomaly.setRiskLevel("MEDIUM");
@@ -542,9 +961,43 @@ public class AttendanceAIServiceImpl implements AttendanceAIService {
         return R * c;
     }
 
+    /**
+     * 智能请假管理
+     * 
+     * 设计原理：
+     * 1. 基于请假类型和时长进行风险评估
+     * 2. 实现自动化审批，提高效率
+     * 3. 对高风险请假进行人工审批，保证审批质量
+     * 4. 分析请假对团队工作负载和项目进度的影响
+     * 
+     * 实现思路：
+     * 1. 根据请假类型和时长进行简单的风险评估
+     * 2. 自动批准低风险请假（如个人假1-2天，病假1-3天）
+     * 3. 高风险请假（如请假时长较长）转人工审批
+     * 4. 分析请假对团队工作负载和项目进度的影响
+     * 
+     * 目标：
+     * 1. 提高请假审批的自动化水平，减少人工审批的工作量
+     * 2. 快速处理低风险请假，提高员工满意度
+     * 3. 确保高风险请假得到充分审核，避免对业务造成影响
+     * 4. 为管理者提供请假影响分析，辅助决策
+     * 
+     * @param tenantId 租户ID
+     * @param request 请假请求，包含请求ID、员工ID、请假类型、请假时长等
+     * @return 请假审批响应，包含审批状态、审批消息、风险等级和请假影响分析
+     */
     @Override
-    public LeaveApprovalResponseDto approveLeave(LeaveRequestDto request) {
-        // 这里实现智能请假管理逻辑
+    public LeaveApprovalResponseDto approveLeave(String tenantId, LeaveRequestDto request) {
+        if (leaveApprovalTimer != null) {
+            return leaveApprovalTimer.record(() -> {
+                return doApproveLeave(tenantId, request);
+            });
+        } else {
+            return doApproveLeave(tenantId, request);
+        }
+    }
+    
+    private LeaveApprovalResponseDto doApproveLeave(String tenantId, LeaveRequestDto request) {
         // 1. 分析员工历史请假记录、工作饱和度和团队排班情况
         // 2. 自动审批低风险请假
         // 3. 高风险请假转人工审批
@@ -576,9 +1029,43 @@ public class AttendanceAIServiceImpl implements AttendanceAIService {
         return response;
     }
 
+    /**
+     * 工时预测与分析
+     * 
+     * 设计原理：
+     * 1. 基于历史工时数据和业务周期规律进行预测
+     * 2. 考虑不同时间段的工时需求差异，如周末和月末
+     * 3. 识别加班高峰和人力不足时段，提前预警
+     * 4. 提供量化的预测指标，辅助人力资源规划
+     * 
+     * 实现思路：
+     * 1. 分析历史工时数据，识别业务周期规律
+     * 2. 预测未来工时需求，考虑周末和月末的特殊情况
+     * 3. 计算预期加班时间和人力不足情况
+     * 4. 识别加班高峰日期，提前预警
+     * 
+     * 目标：
+     * 1. 准确预测未来工时需求，合理规划人力资源
+     * 2. 识别加班高峰和人力不足时段，提前采取措施
+     * 3. 优化人力配置，提高工作效率
+     * 4. 为管理者提供决策支持，辅助人力资源规划
+     * 
+     * @param tenantId 租户ID
+     * @param request 工时预测请求，包含开始和结束日期等
+     * @return 工时预测响应，包含工时预测、预期加班时间、人力不足情况和加班高峰日期
+     */
     @Override
-    public WorkHourPredictionResponseDto predictWorkHours(WorkHourPredictionRequestDto request) {
-        // 这里实现工时预测与分析逻辑
+    public WorkHourPredictionResponseDto predictWorkHours(String tenantId, WorkHourPredictionRequestDto request) {
+        if (workHourPredictionTimer != null) {
+            return workHourPredictionTimer.record(() -> {
+                return doPredictWorkHours(tenantId, request);
+            });
+        } else {
+            return doPredictWorkHours(tenantId, request);
+        }
+    }
+    
+    private WorkHourPredictionResponseDto doPredictWorkHours(String tenantId, WorkHourPredictionRequestDto request) {
         // 1. 分析历史工时数据
         // 2. 预测未来工时需求
         // 3. 识别加班高峰和人力不足时段
@@ -625,3 +1112,6 @@ public class AttendanceAIServiceImpl implements AttendanceAIService {
         return response;
     }
 }
+
+
+

@@ -44,3 +44,6 @@ public class SalaryAnomalyDetectionResponseDto {
         this.lowRiskAnomalies = lowRiskAnomalies;
     }
 }
+
+
+

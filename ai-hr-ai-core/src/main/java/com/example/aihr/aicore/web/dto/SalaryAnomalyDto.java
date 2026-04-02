@@ -72,3 +72,6 @@ public class SalaryAnomalyDto {
         this.evidence = evidence;
     }
 }
+
+
+

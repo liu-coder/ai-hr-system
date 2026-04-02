@@ -56,3 +56,6 @@ public class SalaryPredictionRequestDto {
         this.departmentId = departmentId;
     }
 }
+
+
+

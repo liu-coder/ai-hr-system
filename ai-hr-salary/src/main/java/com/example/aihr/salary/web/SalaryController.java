@@ -2,6 +2,8 @@ package com.example.aihr.salary.web;
 
 import com.example.aihr.salary.service.AuditService;
 import com.example.aihr.salary.service.SalaryService;
+import com.example.aihr.salary.service.SalaryMessageProducer;
+import com.example.aihr.salary.constant.SalaryConstants;
 import com.example.aihr.common.security.RequestContext;
 import com.example.aihr.common.security.RequestContextHolder;
 import jakarta.servlet.http.HttpServletRequest;
@@ -11,6 +13,7 @@ import jakarta.validation.constraints.NotNull;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.LocalDate;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import org.springframework.http.MediaType;
@@ -21,16 +24,29 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+/**
+ * 薪酬控制器
+ * 处理薪酬相关的HTTP请求，包括策略管理、薪资预览和结果查询等功能
+ */
 @RestController
 @RequestMapping(path = "/v1/salary", produces = MediaType.APPLICATION_JSON_VALUE)
 public class SalaryController {
     private final SalaryService salary;
     private final AuditService audit;
+    private final SalaryMessageProducer messageProducer;
     private final ObjectMapper om = new ObjectMapper();
 
-    public SalaryController(SalaryService salary, AuditService audit) {
+    /**
+     * 构造函数
+     * 
+     * @param salary 薪酬服务
+     * @param audit 审计服务
+     * @param messageProducer 消息生产者
+     */
+    public SalaryController(SalaryService salary, AuditService audit, SalaryMessageProducer messageProducer) {
         this.salary = salary;
         this.audit = audit;
+        this.messageProducer = messageProducer;
     }
 
     /**
@@ -59,9 +75,9 @@ public class SalaryController {
         audit.write(
                 tenantId,
                 userId,
-                "HUMAN",
-                "salary.policy.create",
-                "SalaryPolicy",
+                SalaryConstants.OPERATION_TYPE_HUMAN,
+                SalaryConstants.AUDIT_OPERATION_POLICY_CREATE,
+                SalaryConstants.ENTITY_TYPE_POLICY,
                 e.getId(),
                 http.getHeader("X-Trace-Id"),
                 Map.of("name", e.getName(), "version", e.getVersion())
@@ -71,7 +87,7 @@ public class SalaryController {
     }
 
     /**
-     * 预览某员工某个周期的薪资结果（不改变最终发薪流程，仅生成可审计的计算快照）。
+     * 预览某员工某个周期的薪资结果（异步处理）。
      *
      * 入参说明：
      * - `input`：员工维度的输入数据（结构由前端/调用方自定义，当前实现会序列化为 JSON）
@@ -79,7 +95,7 @@ public class SalaryController {
      *
      * @param req 请求体
      * @param http 用于读取 `X-Trace-Id`（审计日志关联用）
-     * @return 出参包含计算运行ID、策略信息、输入快照ID、结果 hash 以及明细 lines
+     * @return `{ "taskId": "..." }`，返回任务ID
      */
     @PostMapping(path = "/preview/employee", consumes = MediaType.APPLICATION_JSON_VALUE)
     public Map<String, Object> previewEmployee(@Valid @RequestBody PreviewEmployeeRequest req, HttpServletRequest http) {
@@ -87,38 +103,38 @@ public class SalaryController {
         String tenantId = ctx.tenantId();
         String userId = ctx.userId();
 
-        SalaryService.PreviewResult result =
-                salary.previewEmployee(tenantId, req.payPeriod(), req.employeeId(), req.input(), req.policyId());
+        // 生成任务ID
+        String taskId = SalaryConstants.TASK_ID_PREFIX + System.currentTimeMillis() + "-" + req.employeeId();
+
+        // 发送异步计算任务到消息队列
+        messageProducer.sendSalaryPreviewTask(
+                tenantId,
+                req.payPeriod(),
+                req.employeeId(),
+                req.input(),
+                req.policyId()
+        );
+
+        Map<String, Object> details = new HashMap<>();
+        details.put("employeeId", req.employeeId());
+        details.put("payPeriod", req.payPeriod());
+        details.put("taskId", taskId);
+        if (req.policyId() != null) {
+            details.put("policyId", req.policyId());
+        }
 
         audit.write(
                 tenantId,
                 userId,
-                "HUMAN",
-                "salary.preview.employee",
-                "SalaryCalcRun",
-                result.calcRunId(),
+                SalaryConstants.OPERATION_TYPE_HUMAN,
+                SalaryConstants.AUDIT_OPERATION_PREVIEW_EMPLOYEE,
+                SalaryConstants.ENTITY_TYPE_TASK,
+                taskId,
                 http.getHeader("X-Trace-Id"),
-                Map.of(
-                        "employeeId", req.employeeId(),
-                        "payPeriod", req.payPeriod(),
-                        "policyId", result.policyId(),
-                        "resultHash", result.resultHash()
-                )
+                details
         );
 
-        return Map.of(
-                "calcRunId", result.calcRunId(),
-                "policyId", result.policyId(),
-                "policyVersion", result.policyVersion(),
-                "inputSnapshotId", result.inputSnapshotId(),
-                "resultHash", result.resultHash(),
-                "lines", result.lines().stream().map(l -> Map.of(
-                        "itemCode", l.getItemCode(),
-                        "itemName", l.getItemName(),
-                        "amountCents", l.getAmountCents(),
-                        "currency", l.getCurrency()
-                )).toList()
-        );
+        return Map.of("taskId", taskId);
     }
 
     /**
@@ -128,7 +144,7 @@ public class SalaryController {
      * @return 每行包含：`id`、`employeeId`、`itemCode`、`itemName`、`amountCents`、`currency`、`detail`
      */
     @GetMapping(path = "/runs/lines")
-    public List<Map<String, Object>> getRunLines(@RequestParam @NotBlank String calcRunId) {
+    public List<Map<String, Object>> getRunLines(@RequestParam("calcRunId") @NotBlank String calcRunId) {
         RequestContext ctx = RequestContextHolder.getRequired();
         String tenantId = ctx.tenantId();
 
@@ -148,6 +164,12 @@ public class SalaryController {
                 .toList();
     }
 
+    /**
+     * 解析明细JSON
+     * 
+     * @param detailJson 明细JSON字符串
+     * @return 解析后的明细对象
+     */
     private Object parseDetail(String detailJson) {
         if (detailJson == null || detailJson.isBlank()) return null;
         try {

@@ -2,7 +2,7 @@ package com.example.aihr.salary.service;
 
 import com.example.aihr.salary.model.SalaryPolicyDto;
 import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -15,7 +15,7 @@ import org.springframework.stereotype.Component;
 @Component
 public class SalaryPolicyCalculator {
 
-    private final ObjectMapper om = new ObjectMapper();
+
 
     /**
      * 若 policy 含有效 itemDefinitions 则按配置计算并返回 lines；否则返回 null。
@@ -61,6 +61,55 @@ public class SalaryPolicyCalculator {
                     detail.put("rateBpsKey", def.getRateBpsKey());
                     detail.put("taxRateBps", bps);
                 }
+                case "SUM" -> {
+                    amount = 0;
+                    if (def.getItemsToSum() != null && !def.getItemsToSum().isEmpty()) {
+                        for (String itemCode : def.getItemsToSum()) {
+                            Long itemAmount = resolved.get(itemCode);
+                            if (itemAmount != null) {
+                                amount += itemAmount;
+                            }
+                        }
+                    }
+                    if (Boolean.TRUE.equals(def.getNegate())) amount = -amount;
+                    detail.put("itemsToSum", def.getItemsToSum());
+                }
+                case "FIXED" -> {
+                    amount = def.getFixedAmount() != null ? def.getFixedAmount() : 0;
+                    if (Boolean.TRUE.equals(def.getNegate())) amount = -amount;
+                    detail.put("fixedAmount", def.getFixedAmount());
+                }
+                case "CONDITIONAL" -> {
+                    amount = 0;
+                    if (def.getCondition() != null) {
+                        String conditionField = def.getCondition().getField();
+                        String conditionOp = def.getCondition().getOp();
+                        String conditionValue = def.getCondition().getValue();
+                        
+                        boolean conditionMet = false;
+                        if ("input".equals(conditionField)) {
+                            String inputKey = conditionValue.split("\\.")[1];
+                            long inputValue = input.path(inputKey).asLong(0);
+                            long compareValue = Long.parseLong(conditionValue.split("\\.")[2]);
+                            
+                            switch (conditionOp) {
+                                case ">" -> conditionMet = inputValue > compareValue;
+                                case "<" -> conditionMet = inputValue < compareValue;
+                                case "==" -> conditionMet = inputValue == compareValue;
+                                case ">=" -> conditionMet = inputValue >= compareValue;
+                                case "<=" -> conditionMet = inputValue <= compareValue;
+                            }
+                        }
+                        
+                        if (conditionMet && def.getTrueAmount() != null) {
+                            amount = def.getTrueAmount();
+                        } else if (!conditionMet && def.getFalseAmount() != null) {
+                            amount = def.getFalseAmount();
+                        }
+                    }
+                    if (Boolean.TRUE.equals(def.getNegate())) amount = -amount;
+                    detail.put("condition", def.getCondition());
+                }
                 case "DERIVED_PRE_TAX" -> {
                     amount = gross - deductionsTotal - social - housing;
                     if (amount < 0) amount = 0;
@@ -81,9 +130,9 @@ public class SalaryPolicyCalculator {
             }
 
             resolved.put(code, amount);
-            if ("BASE".equals(code) || "OVERTIME".equals(code) || "BONUS".equals(code)) {
+            if ("BASE".equals(code) || "OVERTIME".equals(code) || "BONUS".equals(code) || "ALLOWANCE".equals(code) || "COMMISSION".equals(code)) {
                 gross += amount;
-            } else if ("DEDUCTIONS".equals(code)) {
+            } else if ("DEDUCTIONS".equals(code) || "TAX".equals(code) || "SOCIAL".equals(code) || "HOUSING".equals(code)) {
                 deductionsTotal += Math.abs(amount);
             }
             lines.add(new SalaryService.Line(code, name, amount, detail.isEmpty() ? null : detail));

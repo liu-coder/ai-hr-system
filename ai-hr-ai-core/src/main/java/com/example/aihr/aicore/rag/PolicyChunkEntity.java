@@ -3,11 +3,16 @@ package com.example.aihr.aicore.rag;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
+import jakarta.persistence.Index;
 import jakarta.persistence.Table;
 import java.time.Instant;
 
 @Entity
-@Table(name = "policy_chunk")
+@Table(name = "policy_chunk", indexes = {
+    @Index(name = "idx_document_chunk", columnList = "document_id, chunk_index"),
+    @Index(name = "idx_tenant_document", columnList = "tenant_id, document_id"),
+    @Index(name = "idx_tenant_created", columnList = "tenant_id, created_at")
+})
 public class PolicyChunkEntity {
     @Id
     private String id;
@@ -50,4 +55,7 @@ public class PolicyChunkEntity {
     public Instant getCreatedAt() { return createdAt; }
     public void setCreatedAt(Instant createdAt) { this.createdAt = createdAt; }
 }
+
+
+
 

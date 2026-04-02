@@ -1,18 +1,19 @@
 package com.example.aihr.aicore.llm;
 
-import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.stereotype.Service;
 
+/**
+ * 基于自动配置的 ChatModel 创建 ChatClient。
+ */
 @Service
-@ConditionalOnExpression("T(org.springframework.util.StringUtils).hasText('${AIHR_DASHSCOPE_API_KEY:}')")
 public class DashScopeChatService {
     private final ChatClient chatClient;
 
-    public DashScopeChatService(ChatClient chatClient) {
-        this.chatClient = chatClient;
+    public DashScopeChatService(ChatModel chatModel) {
+        this.chatClient = ChatClient.builder(chatModel).build();
     }
-    
 
     public String chat(String message) {
         return chatClient.prompt()
@@ -44,4 +45,3 @@ public class DashScopeChatService {
                 .content();
     }
 }
-

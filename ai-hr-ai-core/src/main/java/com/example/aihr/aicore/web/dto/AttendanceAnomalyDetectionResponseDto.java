@@ -44,3 +44,6 @@ public class AttendanceAnomalyDetectionResponseDto {
         this.lowRiskAnomalies = lowRiskAnomalies;
     }
 }
+
+
+

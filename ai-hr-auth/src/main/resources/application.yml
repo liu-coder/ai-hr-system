@@ -1,49 +1,7 @@
-server:
-  port: ${SERVER_PORT:9101}
-
 spring:
+  config:
+    import: optional:configserver:${SPRING_CLOUD_CONFIG_URI:http://localhost:8888}
   application:
     name: ai-hr-auth
-  datasource:
-    url: jdbc:mysql://${AIHR_MYSQL_HOST:localhost}:${AIHR_MYSQL_PORT:3306}/ai_hr_auth?useUnicode=true&characterEncoding=utf8&useSSL=false&allowPublicKeyRetrieval=true&createDatabaseIfNotExist=true
-    username: ${AIHR_MYSQL_USER:root}
-    password: ${AIHR_MYSQL_PASSWORD:root}
-  jpa:
-    open-in-view: false
-    hibernate:
-      ddl-auto: validate
-    properties:
-      hibernate:
-        jdbc:
-          time_zone: UTC
-  flyway:
-    enabled: true
-  # Sleuth 和 Zipkin 配置
-  zipkin:
-    base-url: http://localhost:9411
-  sleuth:
-    sampler:
-      probability: 1.0
-
-# Eureka 客户端配置
-eureka:
-  client:
-    service-url:
-      defaultZone: http://localhost:8761/eureka/
-  instance:
-    prefer-ip-address: true
-
-aihr:
-  security:
-    jwt:
-      issuer: ai-hr-auth
-      # 生产环境请使用 KMS/密钥管理系统；这里仅为本地演示
-      secret: ${AIHR_JWT_SECRET:}
-      access-token-ttl-seconds: 1800
-
-management:
-  endpoints:
-    web:
-      exposure:
-        include: health,info,metrics,prometheus
+  # 其余配置由配置中心（ai-hr-config-server）下发。
 

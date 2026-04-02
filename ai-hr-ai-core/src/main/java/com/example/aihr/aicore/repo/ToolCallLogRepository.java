@@ -10,3 +10,6 @@ public interface ToolCallLogRepository extends JpaRepository<ToolCallLogEntity, 
     Optional<ToolCallLogEntity> findFirstBySessionIdOrderByCreatedAtDesc(String sessionId);
 }
 
+
+
+

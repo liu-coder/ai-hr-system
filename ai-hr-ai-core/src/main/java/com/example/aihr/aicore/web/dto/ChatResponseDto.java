@@ -22,3 +22,6 @@ public record ChatResponseDto(
         /** 缺参时生成的追问提示，供前端展示并引导用户补全（扩展点：智能补参与追问） */
         String followUpPrompt
 ) {}
+
+
+

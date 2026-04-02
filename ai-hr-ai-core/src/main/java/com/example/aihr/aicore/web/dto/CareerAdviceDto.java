@@ -30,3 +30,6 @@ public class CareerAdviceDto {
         this.specificActions = specificActions;
     }
 }
+
+
+

@@ -46,3 +46,6 @@ public class SchedulingShiftDto {
         this.skillRequirements = skillRequirements;
     }
 }
+
+
+

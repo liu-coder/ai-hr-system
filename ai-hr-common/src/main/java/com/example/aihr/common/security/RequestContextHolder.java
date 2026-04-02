@@ -24,6 +24,10 @@ public final class RequestContextHolder {
         return context;
     }
 
+    public static RequestContext getOptional() {
+        return HOLDER.get();
+    }
+
     public static void clear() {
         HOLDER.remove();
     }

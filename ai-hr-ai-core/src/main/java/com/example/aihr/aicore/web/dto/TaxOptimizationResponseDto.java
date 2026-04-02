@@ -58,3 +58,6 @@ public class TaxOptimizationResponseDto {
         this.taxReductionPercentage = taxReductionPercentage;
     }
 }
+
+
+

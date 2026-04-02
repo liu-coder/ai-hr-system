@@ -1,16 +1,19 @@
 package com.example.aihr.aicore.tools;
 
 import java.net.SocketTimeoutException;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.function.Supplier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatusCode;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import org.springframework.web.client.HttpStatusCodeException;
 import org.springframework.stereotype.Component;
 
@@ -29,16 +32,17 @@ import org.springframework.stereotype.Component;
 public class ToolInvoker {
     private static final Logger log = LoggerFactory.getLogger(ToolInvoker.class);
 
-    private final ExecutorService executor = Executors.newCachedThreadPool();
-
+    private final ExecutorService executor;
     private final int maxAttempts;
     private final long timeoutMs;
     private final long initialBackoffMs;
 
+    @Autowired
     public ToolInvoker(
             @Value("${aihr.toolinvoker.max-attempts:3}") int maxAttempts,
             @Value("${aihr.toolinvoker.timeout-ms:5000}") long timeoutMs,
             @Value("${aihr.toolinvoker.initial-backoff-ms:100}") long initialBackoffMs) {
+        this.executor = createThreadPool();
         this.maxAttempts = maxAttempts;
         this.timeoutMs = timeoutMs;
         this.initialBackoffMs = initialBackoffMs;
@@ -48,12 +52,27 @@ public class ToolInvoker {
         this(maxAttempts, timeoutMs, 100);
     }
 
+    private ExecutorService createThreadPool() {
+        ThreadPoolTaskExecutor taskExecutor = new ThreadPoolTaskExecutor();
+        taskExecutor.setCorePoolSize(10);
+        taskExecutor.setMaxPoolSize(50);
+        taskExecutor.setQueueCapacity(100);
+        taskExecutor.setRejectedExecutionHandler((r, e) -> {
+            log.warn("Task rejected by thread pool: {}", r);
+            throw new RejectedExecutionException("ToolInvoker thread pool overloaded");
+        });
+        taskExecutor.initialize();
+        return taskExecutor.getThreadPoolExecutor();
+    }
+
     public <T> ToolResult<T> invoke(String toolName, Supplier<T> supplier) {
         for (int attempt = 1; attempt <= maxAttempts; attempt++) {
             try {
                 CompletableFuture<T> f = CompletableFuture.supplyAsync(supplier, executor);
                 T resp = f.orTimeout(timeoutMs, TimeUnit.MILLISECONDS).join();
-                return ToolResult.success(resp);
+                @SuppressWarnings("unchecked")
+                T unwrapped = (T) unwrapRestEnvelope(resp);
+                return ToolResult.success(unwrapped);
             } catch (Exception ex) {
                 Throwable cause = unwrap(ex);
 
@@ -130,5 +149,25 @@ public class ToolInvoker {
         String t = s.trim();
         return t.length() > 240 ? t.substring(0, 240) + "..." : t;
     }
+
+    /**
+     * 与 {@code ApiResult.unwrapData} 等价：将 RestTemplate 反序列化的 {@code {code,message,data}} 解包为 data，
+     * 避免 ToolInvoker 线程里依赖 common 中类的加载顺序。
+     */
+    private static Object unwrapRestEnvelope(Object body) {
+        if (!(body instanceof Map<?, ?> m)) {
+            return body;
+        }
+        if (!"0".equals(String.valueOf(m.get("code")))) {
+            return body;
+        }
+        if (!m.containsKey("data")) {
+            return body;
+        }
+        return m.get("data");
+    }
 }
+
+
+
 

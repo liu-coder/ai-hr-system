@@ -3,12 +3,15 @@ package com.example.aihr.attendance.domain;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
+import jakarta.persistence.Index;
 import jakarta.persistence.Table;
 import java.time.Instant;
 import java.time.LocalDate;
 
 @Entity
-@Table(name = "attendance_anomaly")
+@Table(name = "attendance_anomaly", indexes = {
+    @Index(name = "idx_tenant_employee_workdate", columnList = "tenant_id, employee_id, work_date")
+})
 public class AttendanceAnomalyEntity {
     @Id
     private String id;

@@ -1,3 +1,6 @@
+server:
+  port: 9020
+
 spring:
   datasource:
     url: jdbc:mysql://${AIHR_MYSQL_HOST:localhost}:${AIHR_MYSQL_PORT:3306}/ai_hr_salary?useUnicode=true&characterEncoding=utf8&useSSL=false&allowPublicKeyRetrieval=true&createDatabaseIfNotExist=true
@@ -18,7 +21,7 @@ spring:
 eureka:
   client:
     service-url:
-      defaultZone: http://localhost:8761/eureka/
+      defaultZone: ${AIHR_EUREKA_URL:http://localhost:8761/eureka/}
   instance:
     prefer-ip-address: true
 
@@ -26,7 +29,12 @@ aihr:
   security:
     jwt:
       issuer: ${AIHR_JWT_ISSUER:ai-hr-auth}
-      secret: ${AIHR_JWT_SECRET:}
+      secret: ${AIHR_JWT_SECRET:A9b@C8d!E7f%G6h*I5j?K4l&M3n@P2q!R1s%T0u@}
+
+rocketmq:
+  name-server: ${AIHR_ROCKETMQ_NAMESRV:localhost:9876}
+  producer:
+    group: salary-producer-group
 
 management:
   endpoints:

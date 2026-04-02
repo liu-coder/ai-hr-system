@@ -1,4 +1,4 @@
-package com.example.aihr.aicore.web;
+package com.example.aihr.common.validation;
 
 import java.util.regex.Pattern;
 import org.apache.commons.text.StringEscapeUtils;

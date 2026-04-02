@@ -22,14 +22,53 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * 薪酬AI服务实现类，提供智能薪酬调整建议、税务优化建议、薪酬预测与职业规划和薪酬异常检测功能。
+ * 薪酬AI服务实现类
+ * 
+ * 设计原理：
+ * 1. 采用模块化设计，将薪酬AI功能分为薪酬调整、税务优化、薪酬预测和薪酬异常检测四个核心模块
+ * 2. 基于多维度数据进行分析和决策，如员工绩效、市场薪酬、内部公平性等
+ * 3. 提供量化的评估指标和建议，辅助管理者进行决策
+ * 4. 结合规则引擎和统计分析方法，实现智能化的薪酬管理
+ * 
+ * 目标：
+ * 1. 提高薪酬管理的自动化和智能化水平
+ * 2. 优化薪酬调整方案，确保公平性和竞争力
+ * 3. 提供税务优化建议，减少员工税负
+ * 4. 预测薪酬增长趋势，辅助职业规划
+ * 5. 及时检测薪酬异常，确保薪酬体系的合理性
  */
 @Service
 public class SalaryAIServiceImpl implements SalaryAIService {
 
+    /**
+     * 智能薪酬调整建议
+     * 
+     * 设计原理：
+     * 1. 基于多维度因素进行薪酬调整决策，包括市场薪酬、绩效表现、内部公平性和司龄
+     * 2. 采用加权评分方法，综合考虑各因素的重要性
+     * 3. 考虑预算限制，确保调薪方案在预算范围内
+     * 4. 为每个员工生成个性化的调薪建议和理由
+     * 
+     * 实现思路：
+     * 1. 计算部门平均薪资和绩效平均分
+     * 2. 为每个员工计算市场调整、绩效调整、内部公平调整和司龄调整
+     * 3. 综合各调整因素，计算总调薪金额
+     * 4. 按预算限制调整调薪方案
+     * 5. 生成调薪建议报告，包括总调薪金额、平均调薪比例和预算影响
+     * 
+     * 目标：
+     * 1. 生成公平、合理的薪酬调整方案
+     * 2. 确保薪酬调整与市场水平保持一致
+     * 3. 激励高绩效员工，提高员工满意度
+     * 4. 确保调薪方案在预算范围内
+     * 5. 为管理者提供决策支持，减少人工决策的主观性
+     * 
+     * @param tenantId 租户ID
+     * @param request 薪酬调整请求，包含员工列表和预算限制等
+     * @return 薪酬调整响应，包含调薪建议和预算影响分析
+     */
     @Override
-    public SalaryAdjustmentResponseDto suggestSalaryAdjustment(SalaryAdjustmentRequestDto request) {
-        // 这里实现智能薪酬调整建议逻辑
+    public SalaryAdjustmentResponseDto suggestSalaryAdjustment(String tenantId, SalaryAdjustmentRequestDto request) {
         // 1. 分析员工绩效、市场薪酬数据、内部公平性
         // 2. 生成个性化调薪方案
         // 3. 评估预算影响
@@ -228,9 +267,35 @@ public class SalaryAIServiceImpl implements SalaryAIService {
         }
     }
 
+    /**
+     * 税务优化建议
+     * 
+     * 设计原理：
+     * 1. 基于税法规定和员工个人情况进行税务筹划
+     * 2. 充分利用专项扣除、公积金等税务优惠政策
+     * 3. 提供具体的优化方案和实施步骤
+     * 4. 量化节税效果，评估优化方案的价值
+     * 
+     * 实现思路：
+     * 1. 分析员工当前的税务状况
+     * 2. 识别可利用的税务优惠政策
+     * 3. 生成具体的税务优化建议
+     * 4. 计算预期节税金额和节税比例
+     * 5. 提供详细的实施步骤
+     * 
+     * 目标：
+     * 1. 减少员工税负，提高实际收入
+     * 2. 确保税务筹划的合法性和合规性
+     * 3. 为员工提供个性化的税务优化建议
+     * 4. 提高员工对薪酬福利的满意度
+     * 5. 为管理者提供税务优化方案，增强企业的竞争力
+     * 
+     * @param tenantId 租户ID
+     * @param request 税务优化请求，包含员工ID、当前应税收入和当前税额等
+     * @return 税务优化响应，包含优化建议和节税效果分析
+     */
     @Override
-    public TaxOptimizationResponseDto optimizeTax(TaxOptimizationRequestDto request) {
-        // 这里实现税务优化建议逻辑
+    public TaxOptimizationResponseDto optimizeTax(String tenantId, TaxOptimizationRequestDto request) {
         // 1. 分析员工个人情况和税法规定
         // 2. 计算最优税务筹划方案
         // 3. 分析节税效果
@@ -273,9 +338,35 @@ public class SalaryAIServiceImpl implements SalaryAIService {
         return response;
     }
 
+    /**
+     * 薪酬预测与职业规划
+     * 
+     * 设计原理：
+     * 1. 基于员工绩效、技能水平和市场趋势进行薪酬预测
+     * 2. 考虑不同绩效和技能水平对薪酬增长的影响
+     * 3. 提供个性化的职业发展建议，辅助员工规划职业路径
+     * 4. 量化薪酬增长预测，为员工提供清晰的职业发展预期
+     * 
+     * 实现思路：
+     * 1. 分析员工当前的绩效和技能水平
+     * 2. 预测未来5年的薪酬增长趋势
+     * 3. 根据绩效和技能水平调整增长率
+     * 4. 生成职业发展建议，包括技能提升、绩效改进和晋升准备
+     * 5. 计算平均年增长率和5年薪酬预测
+     * 
+     * 目标：
+     * 1. 为员工提供清晰的薪酬增长预期
+     * 2. 帮助员工制定合理的职业发展规划
+     * 3. 激励员工提升技能和绩效
+     * 4. 为管理者提供员工职业发展的参考信息
+     * 5. 提高员工的工作积极性和满意度
+     * 
+     * @param tenantId 租户ID
+     * @param request 薪酬预测请求，包含员工ID、当前薪资、绩效评分和技能水平等
+     * @return 薪酬预测响应，包含薪酬预测和职业发展建议
+     */
     @Override
-    public SalaryPredictionResponseDto predictSalary(SalaryPredictionRequestDto request) {
-        // 这里实现薪酬预测与职业规划逻辑
+    public SalaryPredictionResponseDto predictSalary(String tenantId, SalaryPredictionRequestDto request) {
         // 1. 分析员工绩效、技能发展、市场趋势
         // 2. 预测未来薪酬增长路径
         // 3. 提供职业发展建议
@@ -359,9 +450,34 @@ public class SalaryAIServiceImpl implements SalaryAIService {
         return response;
     }
 
+    /**
+     * 薪酬异常检测
+     * 
+     * 设计原理：
+     * 1. 基于多维度数据进行薪酬异常检测，包括职位、绩效、司龄等
+     * 2. 采用统计分析方法，识别异常模式
+     * 3. 根据异常的严重程度，划分不同的风险等级
+     * 4. 提供详细的异常证据，便于人工审核
+     * 
+     * 实现思路：
+     * 1. 按职位分组计算平均薪资
+     * 2. 分析每条薪酬数据，检测同工不同酬、薪资异常增长、薪资与绩效不匹配、薪资与司龄不匹配等异常
+     * 3. 根据异常的严重程度，确定风险等级
+     * 4. 生成异常检测报告，包括异常数量和风险等级分布
+     * 
+     * 目标：
+     * 1. 及时检测薪酬异常，确保薪酬体系的合理性
+     * 2. 识别同工不同酬等不公平现象，促进薪酬公平性
+     * 3. 发现薪资异常增长等潜在问题，防止薪酬体系失控
+     * 4. 为管理者提供决策支持，及时发现和处理薪酬问题
+     * 5. 提高薪酬管理的透明度和公正性
+     * 
+     * @param tenantId 租户ID
+     * @param request 薪酬异常检测请求，包含薪酬数据列表
+     * @return 薪酬异常检测响应，包含异常列表和风险等级分布
+     */
     @Override
-    public SalaryAnomalyDetectionResponseDto detectSalaryAnomalies(SalaryAnomalyDetectionRequestDto request) {
-        // 这里实现薪酬异常检测逻辑
+    public SalaryAnomalyDetectionResponseDto detectSalaryAnomalies(String tenantId, SalaryAnomalyDetectionRequestDto request) {
         // 1. 分析薪酬数据
         // 2. 识别异常模式
         // 3. 评估风险等级并生成预警
@@ -567,3 +683,6 @@ public class SalaryAIServiceImpl implements SalaryAIService {
         }
     }
 }
+
+
+

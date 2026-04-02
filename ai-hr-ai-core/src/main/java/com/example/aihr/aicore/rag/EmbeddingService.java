@@ -12,6 +12,8 @@ import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -31,16 +33,23 @@ public class EmbeddingService {
 
     private final RestTemplate rt;
     private final ObjectMapper om;
+    private final String configuredApiKey;
 
-    public EmbeddingService(RestTemplate rt, ObjectMapper om) {
+    public EmbeddingService(
+            @Qualifier("restTemplate") RestTemplate rt,
+            ObjectMapper om,
+            @Value("${spring.ai.dashscope.api-key:}") String configuredApiKey) {
         this.rt = rt;
         this.om = om;
+        this.configuredApiKey = configuredApiKey;
     }
 
     public List<Float> embed(String text) {
-        String apiKey = System.getenv("AIHR_DASHSCOPE_API_KEY");
+        String apiKey = (configuredApiKey == null || configuredApiKey.isBlank())
+                ? System.getenv("AIHR_DASHSCOPE_API_KEY")
+                : configuredApiKey;
         if (apiKey == null || apiKey.isBlank()) {
-            log.warn("DashScope embedding disabled: AIHR_DASHSCOPE_API_KEY not set. Return zero vector.");
+            log.warn("DashScope embedding disabled: API key not set in config/env. Return zero vector.");
             return zeroVector();
         }
 
@@ -114,4 +123,7 @@ public class EmbeddingService {
         }
     }
 }
+
+
+
 

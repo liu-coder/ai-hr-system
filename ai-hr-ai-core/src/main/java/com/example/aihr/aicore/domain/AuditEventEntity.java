@@ -64,3 +64,6 @@ public class AuditEventEntity {
     public void setAttributes(String attributes) { this.attributes = attributes; }
 }
 
+
+
+

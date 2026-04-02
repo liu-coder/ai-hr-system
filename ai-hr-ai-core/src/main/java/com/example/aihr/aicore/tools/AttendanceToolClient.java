@@ -1,8 +1,10 @@
 package com.example.aihr.aicore.tools;
 
-import com.example.aihr.aicore.config.ServiceEndpointsProperties;
+
 import com.example.aihr.aicore.service.AuditService;
 import com.example.aihr.aicore.service.ToolCallLogger;
+import com.example.aihr.aicore.tools.ToolInvoker;
+import com.example.aihr.aicore.tools.ToolResult;
 import com.example.aihr.common.security.RequestContext;
 import com.example.aihr.common.security.RequestContextHolder;
 import java.util.Map;
@@ -22,22 +24,20 @@ import org.springframework.cloud.client.circuitbreaker.CircuitBreakerFactory;
 public class AttendanceToolClient {
     private static final Logger log = LoggerFactory.getLogger(AttendanceToolClient.class);
     private final RestTemplate rt;
-    private final ServiceEndpointsProperties endpoints;
+
     private final ToolCallLogger toolLog;
     private final AuditService audit;
     private final ObjectMapper om;
     private final ToolInvoker toolInvoker;
-    private final CircuitBreakerFactory circuitBreakerFactory;
+    private final CircuitBreakerFactory<?, ?> circuitBreakerFactory;
 
     public AttendanceToolClient(@LoadBalanced RestTemplate rt,
-                                 ServiceEndpointsProperties endpoints,
                                  ToolCallLogger toolLog,
                                  AuditService audit,
                                  ObjectMapper om,
                                  ToolInvoker toolInvoker,
-                                 CircuitBreakerFactory circuitBreakerFactory) {
+                                 CircuitBreakerFactory<?, ?> circuitBreakerFactory) {
         this.rt = rt;
-        this.endpoints = endpoints;
         this.toolLog = toolLog;
         this.audit = audit;
         this.om = om;
@@ -82,11 +82,12 @@ public class AttendanceToolClient {
         // P1: 使用熔断器包装调用
         CircuitBreaker cb = circuitBreakerFactory.create("attendanceTool");
         ToolResult<Object> result = cb.run(
-            () -> toolInvoker.invoke("attendance.listAnomalies", () -> rt.getForObject(
+            () -> toolInvoker.invoke("attendance.listAnomalies", () -> rt.exchange(
                     url,
-                    Object.class,
-                    new HttpEntity<>(headersFromCtx(ctx, traceId))
-            )),
+                    org.springframework.http.HttpMethod.GET,
+                    new HttpEntity<>(headersFromCtx(ctx, traceId)),
+                    Object.class
+            ).getBody()),
             throwable -> {
                 log.warn("熔断器触发，attendance.listAnomalies 失败：{}", throwable.getMessage());
                 return ToolResult.failed("熔断器保护：" + throwable.getMessage());
@@ -113,4 +114,7 @@ public class AttendanceToolClient {
         return h;
     }
 }
+
+
+
 

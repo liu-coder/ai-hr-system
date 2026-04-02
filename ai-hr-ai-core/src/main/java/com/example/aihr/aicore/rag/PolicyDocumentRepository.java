@@ -7,3 +7,6 @@ public interface PolicyDocumentRepository extends JpaRepository<PolicyDocumentEn
     List<PolicyDocumentEntity> findByTenantIdAndDocTypeAndTitle(String tenantId, String docType, String title);
 }
 
+
+
+

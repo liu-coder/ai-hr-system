@@ -3,12 +3,17 @@ package com.example.aihr.aicore.rag;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
+import jakarta.persistence.Index;
 import jakarta.persistence.Table;
 import java.time.Instant;
 import java.time.LocalDate;
 
 @Entity
-@Table(name = "policy_document")
+@Table(name = "policy_document", indexes = {
+    @Index(name = "idx_tenant_status_effective", columnList = "tenant_id, status, effective_from"),
+    @Index(name = "idx_doc_type_tenant", columnList = "doc_type, tenant_id"),
+    @Index(name = "idx_effective_period", columnList = "effective_from, effective_to")
+})
 public class PolicyDocumentEntity {
     @Id
     private String id;
@@ -71,4 +76,7 @@ public class PolicyDocumentEntity {
     public String getStatus() { return status; }
     public void setStatus(String status) { this.status = status; }
 }
+
+
+
 

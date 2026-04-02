@@ -2,10 +2,13 @@ package com.example.aihr.aicore.session;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.script.RedisScript;
 import org.springframework.stereotype.Service;
 
 /**
@@ -15,13 +18,35 @@ import org.springframework.stereotype.Service;
 @Service
 public class SessionContextService {
 
-    private final Map<String, PendingSlots> store = new ConcurrentHashMap<>();
+    private static class SessionEntry {
+        final PendingSlots slots;
+        final Instant timestamp;
+        
+        SessionEntry(PendingSlots slots) {
+            this.slots = slots;
+            this.timestamp = Instant.now();
+        }
+    }
+    
+    private final ConcurrentHashMap<String, SessionEntry> store = new ConcurrentHashMap<>();
     private static final int MAX_SESSIONS = 10_000;
     private static final String REDIS_PREFIX = "ai-hr:session:pending:";
     private static final Duration TTL = Duration.ofMinutes(30);
 
     private final ObjectProvider<StringRedisTemplate> redisProvider;
     private final ObjectMapper om;
+    
+    // Lua 脚本，确保 get 和 delete 操作的原子性
+    private static final String GET_AND_DELETE_SCRIPT = """
+        local key = KEYS[1]
+        local value = redis.call('get', key)
+        if value then
+            redis.call('del', key)
+        end
+        return value
+    """;
+    
+    private final RedisScript<String> getAndDeleteScript = RedisScript.of(GET_AND_DELETE_SCRIPT, String.class);
 
     public SessionContextService(ObjectProvider<StringRedisTemplate> redisProvider, ObjectMapper om) {
         this.redisProvider = redisProvider;
@@ -42,29 +67,30 @@ public class SessionContextService {
             // Redis 不可用时走内存兜底
         }
 
-        if (store.size() >= MAX_SESSIONS) evictOne();
-        store.put(sessionId, pending);
+        // 内存兜底，使用原子操作确保线程安全
+        if (store.size() >= MAX_SESSIONS) {
+            evictOldest();
+        }
+        store.put(sessionId, new SessionEntry(pending));
     }
 
     public PendingSlots getAndClear(String sessionId) {
-        StringRedisTemplate redis = null;
         try {
-            redis = redisProvider.getIfAvailable();
+            StringRedisTemplate redis = redisProvider.getIfAvailable();
             if (redis != null) {
-                String json = redis.opsForValue().get(key(sessionId));
+                String json = redis.execute(getAndDeleteScript, java.util.Collections.singletonList(key(sessionId)));
                 if (json != null) {
-                    redis.delete(key(sessionId));
                     return om.readValue(json, PendingSlots.class);
                 }
             }
         } catch (Exception ignored) {}
-        return store.remove(sessionId);
+        SessionEntry entry = store.remove(sessionId);
+        return entry != null ? entry.slots : null;
     }
 
     public PendingSlots get(String sessionId) {
-        StringRedisTemplate redis = null;
         try {
-            redis = redisProvider.getIfAvailable();
+            StringRedisTemplate redis = redisProvider.getIfAvailable();
             if (redis != null) {
                 String json = redis.opsForValue().get(key(sessionId));
                 if (json != null) {
@@ -72,11 +98,15 @@ public class SessionContextService {
                 }
             }
         } catch (Exception ignored) {}
-        return store.get(sessionId);
+        SessionEntry entry = store.get(sessionId);
+        return entry != null ? entry.slots : null;
     }
 
-    private void evictOne() {
-        store.keySet().stream().findFirst().ifPresent(store::remove);
+    private void evictOldest() {
+        // 找出最早的会话并移除
+        store.entrySet().stream()
+            .min(Map.Entry.comparingByValue((e1, e2) -> e1.timestamp.compareTo(e2.timestamp)))
+            .ifPresent(entry -> store.remove(entry.getKey()));
     }
 
     private String key(String sessionId) {
@@ -85,3 +115,6 @@ public class SessionContextService {
 
     public record PendingSlots(String route, Map<String, Object> extractedSoFar, String followUpPrompt) {}
 }
+
+
+

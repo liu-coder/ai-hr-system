@@ -95,6 +95,69 @@ public class AttendanceRuleEngine {
             }
         }
 
+        // 工作时长规则
+        if ("workDurationMinutes".equalsIgnoreCase(field)) {
+            if (record.getCheckInAt() == null || record.getCheckOutAt() == null) return null;
+            long durationMinutes = java.time.Duration.between(record.getCheckInAt(), record.getCheckOutAt()).toMinutes();
+            facts.put("workDurationMinutes", durationMinutes);
+            facts.put("checkInAt", record.getCheckInAt().toString());
+            facts.put("checkOutAt", record.getCheckOutAt().toString());
+            
+            if ("lessThan".equalsIgnoreCase(op) && value != null) {
+                int threshold = Integer.parseInt(value);
+                if (durationMinutes < threshold) {
+                    facts.put("threshold", value);
+                    return buildResult(record.getWorkDate(), rule, facts, "工作时长不足：实际工作时长 " + durationMinutes + " 分钟，低于要求的 " + threshold + " 分钟");
+                }
+            }
+            if ("greaterThan".equalsIgnoreCase(op) && value != null) {
+                int threshold = Integer.parseInt(value);
+                if (durationMinutes > threshold) {
+                    facts.put("threshold", value);
+                    return buildResult(record.getWorkDate(), rule, facts, "工作时长过长：实际工作时长 " + durationMinutes + " 分钟，超过要求的 " + threshold + " 分钟");
+                }
+            }
+        }
+
+        // 打卡地点规则
+        if ("checkInLocationValid".equalsIgnoreCase(field) || "checkOutLocationValid".equalsIgnoreCase(field)) {
+            boolean isCheckIn = "checkInLocationValid".equalsIgnoreCase(field);
+            String locationType = isCheckIn ? "checkInLocation" : "checkOutLocation";
+            String locationValidType = isCheckIn ? "checkInLocationValid" : "checkOutLocationValid";
+            
+            boolean locationValid = isCheckIn ? record.isCheckInLocationValid() : record.isCheckOutLocationValid();
+            facts.put(locationType, isCheckIn ? record.getCheckInLocation() : record.getCheckOutLocation());
+            facts.put(locationValidType, locationValid);
+            
+            if ("equals".equalsIgnoreCase(op) && "false".equalsIgnoreCase(value)) {
+                if (!locationValid) {
+                    return buildResult(record.getWorkDate(), rule, facts, (isCheckIn ? "上班" : "下班") + "打卡地点无效");
+                }
+            }
+        }
+
+        // 打卡设备规则
+        if ("checkInDeviceType".equalsIgnoreCase(field) || "checkOutDeviceType".equalsIgnoreCase(field)) {
+            boolean isCheckIn = "checkInDeviceType".equalsIgnoreCase(field);
+            String deviceType = isCheckIn ? record.getCheckInDeviceType() : record.getCheckOutDeviceType();
+            facts.put(isCheckIn ? "checkInDeviceType" : "checkOutDeviceType", deviceType);
+            
+            if ("notIn".equalsIgnoreCase(op) && value != null) {
+                String[] allowedDevices = value.split(",");
+                boolean isAllowed = false;
+                for (String allowedDevice : allowedDevices) {
+                    if (allowedDevice.trim().equals(deviceType)) {
+                        isAllowed = true;
+                        break;
+                    }
+                }
+                if (!isAllowed) {
+                    facts.put("allowedDevices", value);
+                    return buildResult(record.getWorkDate(), rule, facts, (isCheckIn ? "上班" : "下班") + "打卡设备类型不允许：" + deviceType);
+                }
+            }
+        }
+
         return null;
     }
 

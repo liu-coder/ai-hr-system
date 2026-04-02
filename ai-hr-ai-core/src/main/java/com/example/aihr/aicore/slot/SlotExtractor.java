@@ -2,7 +2,7 @@ package com.example.aihr.aicore.slot;
 
 import java.time.LocalDate;
 import java.time.YearMonth;
-import java.time.format.DateTimeFormatter;
+
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
@@ -36,7 +36,7 @@ public class SlotExtractor {
         String text = message.trim();
         Map<String, Object> out = new HashMap<>();
 
-        if ("ATTENDANCE".equals(route)) {
+        if ("ATTENDANCE".equals(route) || "ATTENDANCE_PATTERN".equals(route)) {
             extractAttendanceSlots(text, out);
         } else if ("ATTENDANCE_MULTI_SUMMARY".equals(route)) {
             extractAttendanceSlots(text, out);
@@ -135,6 +135,11 @@ public class SlotExtractor {
         if (text.contains("今天")) {
             LocalDate d = LocalDate.now();
             return new LocalDate[]{d, d};
+        }
+        if (text.contains("30天") || text.contains("30 天") || text.contains("近30") || text.contains("三十天")
+                || text.contains("一个月") || text.contains("近一月")) {
+            LocalDate end = LocalDate.now();
+            return new LocalDate[]{end.minusDays(29), end};
         }
         if (text.contains("本周")) {
             LocalDate now = LocalDate.now();
@@ -257,3 +262,6 @@ public class SlotExtractor {
                 && args.get("payPeriod") != null && !String.valueOf(args.get("payPeriod")).isBlank();
     }
 }
+
+
+

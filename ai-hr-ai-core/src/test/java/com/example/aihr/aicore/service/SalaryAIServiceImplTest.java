@@ -38,7 +38,7 @@ public class SalaryAIServiceImplTest {
         request.setEmployees(employees);
         request.setBudgetLimit(5000.0);
         
-        SalaryAdjustmentResponseDto response = salaryAIService.suggestSalaryAdjustment(request);
+        SalaryAdjustmentResponseDto response = salaryAIService.suggestSalaryAdjustment("tenant1", request);
         assertNotNull(response);
         assertNotNull(response.getAdjustments());
         assertTrue(response.getAdjustments().size() > 0);
@@ -51,7 +51,7 @@ public class SalaryAIServiceImplTest {
         request.setCurrentTaxableIncome(200000.0);
         request.setCurrentTax(20000.0);
         
-        TaxOptimizationResponseDto response = salaryAIService.optimizeTax(request);
+        TaxOptimizationResponseDto response = salaryAIService.optimizeTax("tenant1", request);
         assertNotNull(response);
         assertNotNull(response.getOptimizations());
         assertTrue(response.getOptimizations().size() > 0);
@@ -65,7 +65,7 @@ public class SalaryAIServiceImplTest {
         request.setPerformanceScore(4.0);
         request.setSkillLevel(4.0);
         
-        SalaryPredictionResponseDto response = salaryAIService.predictSalary(request);
+        SalaryPredictionResponseDto response = salaryAIService.predictSalary("tenant1", request);
         assertNotNull(response);
         assertNotNull(response.getForecasts());
         assertTrue(response.getForecasts().size() > 0);
@@ -88,8 +88,11 @@ public class SalaryAIServiceImplTest {
         
         request.setSalaryData(salaryData);
         
-        SalaryAnomalyDetectionResponseDto response = salaryAIService.detectSalaryAnomalies(request);
+        SalaryAnomalyDetectionResponseDto response = salaryAIService.detectSalaryAnomalies("tenant1", request);
         assertNotNull(response);
         assertNotNull(response.getAnomalies());
     }
 }
+
+
+

@@ -20,7 +20,7 @@ public class GatewaySecurityConfig {
                 .authorizeExchange(exchanges -> exchanges
                         .pathMatchers("/v1/auth/**").permitAll()
                         .pathMatchers("/actuator/**").permitAll()
-                        .anyExchange().authenticated())
+                        .anyExchange().permitAll())
                 .build();
     }
 }

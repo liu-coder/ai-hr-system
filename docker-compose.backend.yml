@@ -1,0 +1,192 @@
+# 业务微服务编排。基础镜像版本见 docker/base-images.env（与 E:\workspace\docker\docker-compose.base.yml 对齐）。
+# 默认连接同一 Docker 网络 app-network 上的服务名：mysql、redis、standalone(Milvus)、rocketmq-namesrv。
+# 基础设施启动顺序建议：
+#   1) docker compose -f E:/workspace/docker/docker-compose.base.yml up -d
+#   2) docker compose -f docker/infra-rocketmq.yml up -d
+#   3) docker compose --env-file docker/base-images.env -f docker-compose.backend.yml up -d --build
+# 若基础服务在宿主机，可设置 AIHR_MYSQL_HOST=host.docker.internal 等覆盖默认值。
+
+services:
+  ai-hr-eureka-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        BASE_JAVA_IMAGE: ${BASE_JAVA_IMAGE:-eclipse-temurin:17-jre}
+        JAR_FILE: ai-hr-eureka-server/target/ai-hr-eureka-server-0.1.0-SNAPSHOT.jar
+    environment:
+      EUREKA_INSTANCE_HOSTNAME: ai-hr-eureka-server
+    ports:
+      - "8761:8761"
+    restart: on-failure
+    networks:
+      - app-network
+
+  ai-hr-config-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        BASE_JAVA_IMAGE: ${BASE_JAVA_IMAGE:-eclipse-temurin:17-jre}
+        JAR_FILE: ai-hr-config-server/target/ai-hr-config-server-0.1.0-SNAPSHOT.jar
+    environment:
+      SPRING_PROFILES_ACTIVE: native
+      AIHR_EUREKA_URL: http://ai-hr-eureka-server:8761/eureka/
+    ports:
+      - "8888:8888"
+    restart: on-failure
+    depends_on:
+      - ai-hr-eureka-server
+    networks:
+      - app-network
+
+  ai-hr-auth:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        BASE_JAVA_IMAGE: ${BASE_JAVA_IMAGE:-eclipse-temurin:17-jre}
+        JAR_FILE: ai-hr-auth/target/ai-hr-auth-0.1.0-SNAPSHOT.jar
+    environment:
+      SPRING_CONFIG_IMPORT: optional:configserver:http://ai-hr-config-server:8888
+      SPRING_CLOUD_CONFIG_URI: http://ai-hr-config-server:8888
+      AIHR_EUREKA_URL: http://ai-hr-eureka-server:8761/eureka/
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://ai-hr-eureka-server:8761/eureka/
+      AIHR_MYSQL_HOST: ${AIHR_MYSQL_HOST:-mysql}
+      AIHR_MYSQL_PORT: ${AIHR_MYSQL_PORT:-3306}
+      AIHR_MYSQL_USER: ${AIHR_MYSQL_USER:-root}
+      AIHR_MYSQL_PASSWORD: ${AIHR_MYSQL_PASSWORD:-root}
+      AIHR_REDIS_HOST: ${AIHR_REDIS_HOST:-redis}
+      AIHR_REDIS_PASSWORD: ${AIHR_REDIS_PASSWORD:-redis}
+      AIHR_ROCKETMQ_NAMESRV: ${AIHR_ROCKETMQ_NAMESRV:-rocketmq-namesrv:9876}
+    ports:
+      - "9101:9101"
+    restart: on-failure
+    depends_on:
+      - ai-hr-config-server
+    networks:
+      - app-network
+
+  ai-hr-attendance:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        BASE_JAVA_IMAGE: ${BASE_JAVA_IMAGE:-eclipse-temurin:17-jre}
+        JAR_FILE: ai-hr-attendance/target/ai-hr-attendance-0.1.0-SNAPSHOT.jar
+    environment:
+      SPRING_CONFIG_IMPORT: optional:configserver:http://ai-hr-config-server:8888
+      SPRING_CLOUD_CONFIG_URI: http://ai-hr-config-server:8888
+      AIHR_EUREKA_URL: http://ai-hr-eureka-server:8761/eureka/
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://ai-hr-eureka-server:8761/eureka/
+      AIHR_MYSQL_HOST: ${AIHR_MYSQL_HOST:-mysql}
+      AIHR_MYSQL_PORT: ${AIHR_MYSQL_PORT:-3306}
+      AIHR_MYSQL_USER: ${AIHR_MYSQL_USER:-root}
+      AIHR_MYSQL_PASSWORD: ${AIHR_MYSQL_PASSWORD:-root}
+      AIHR_REDIS_HOST: ${AIHR_REDIS_HOST:-redis}
+      AIHR_REDIS_PASSWORD: ${AIHR_REDIS_PASSWORD:-redis}
+      AIHR_ROCKETMQ_NAMESRV: ${AIHR_ROCKETMQ_NAMESRV:-rocketmq-namesrv:9876}
+    ports:
+      - "9010:9010"
+    restart: on-failure
+    depends_on:
+      - ai-hr-config-server
+    networks:
+      - app-network
+
+  ai-hr-salary:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        BASE_JAVA_IMAGE: ${BASE_JAVA_IMAGE:-eclipse-temurin:17-jre}
+        JAR_FILE: ai-hr-salary/target/ai-hr-salary-0.1.0-SNAPSHOT.jar
+    environment:
+      SPRING_CONFIG_IMPORT: optional:configserver:http://ai-hr-config-server:8888
+      SPRING_CLOUD_CONFIG_URI: http://ai-hr-config-server:8888
+      AIHR_EUREKA_URL: http://ai-hr-eureka-server:8761/eureka/
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://ai-hr-eureka-server:8761/eureka/
+      AIHR_MYSQL_HOST: ${AIHR_MYSQL_HOST:-mysql}
+      AIHR_MYSQL_PORT: ${AIHR_MYSQL_PORT:-3306}
+      AIHR_MYSQL_USER: ${AIHR_MYSQL_USER:-root}
+      AIHR_MYSQL_PASSWORD: ${AIHR_MYSQL_PASSWORD:-root}
+      AIHR_REDIS_HOST: ${AIHR_REDIS_HOST:-redis}
+      AIHR_REDIS_PASSWORD: ${AIHR_REDIS_PASSWORD:-redis}
+      AIHR_ROCKETMQ_NAMESRV: ${AIHR_ROCKETMQ_NAMESRV:-rocketmq-namesrv:9876}
+    ports:
+      - "9020:9020"
+    restart: on-failure
+    depends_on:
+      - ai-hr-config-server
+    networks:
+      - app-network
+
+  ai-hr-ai-core:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        BASE_JAVA_IMAGE: ${BASE_JAVA_IMAGE:-eclipse-temurin:17-jre}
+        JAR_FILE: ai-hr-ai-core/target/ai-hr-ai-core-app-exec.jar
+    environment:
+      SPRING_CONFIG_IMPORT: optional:configserver:http://ai-hr-config-server:8888
+      SPRING_CLOUD_CONFIG_URI: http://ai-hr-config-server:8888
+      AIHR_EUREKA_URL: http://ai-hr-eureka-server:8761/eureka/
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://ai-hr-eureka-server:8761/eureka/
+      AIHR_MYSQL_HOST: ${AIHR_MYSQL_HOST:-mysql}
+      AIHR_MYSQL_PORT: ${AIHR_MYSQL_PORT:-3306}
+      AIHR_MYSQL_USER: ${AIHR_MYSQL_USER:-root}
+      AIHR_MYSQL_PASSWORD: ${AIHR_MYSQL_PASSWORD:-root}
+      AIHR_REDIS_HOST: ${AIHR_REDIS_HOST:-redis}
+      AIHR_REDIS_PASSWORD: ${AIHR_REDIS_PASSWORD:-redis}
+      AIHR_MILVUS_HOST: ${AIHR_MILVUS_HOST:-standalone}
+      AIHR_MILVUS_PORT: ${AIHR_MILVUS_PORT:-19530}
+      AIHR_ROCKETMQ_NAMESRV: ${AIHR_ROCKETMQ_NAMESRV:-rocketmq-namesrv:9876}
+      AIHR_JWT_ISSUER: ${AIHR_JWT_ISSUER:-ai-hr-auth}
+      AIHR_JWT_SECRET: ${AIHR_JWT_SECRET:-A9b@C8d!E7f%G6h*I5j?K4l&M3n@P2q!R1s%T0u@}
+      SPRING_DATASOURCE_HIKARI_JDBC_URL: jdbc:mysql://${AIHR_MYSQL_HOST:-mysql}:${AIHR_MYSQL_PORT:-3306}/ai_hr_aicore?useUnicode=true&characterEncoding=utf8&useSSL=false&allowPublicKeyRetrieval=true&createDatabaseIfNotExist=true
+      SPRING_DATASOURCE_HIKARI_USERNAME: ${AIHR_MYSQL_USER:-root}
+      SPRING_DATASOURCE_HIKARI_PASSWORD: ${AIHR_MYSQL_PASSWORD:-root}
+    ports:
+      - "9030:9030"
+    restart: on-failure
+    depends_on:
+      - ai-hr-config-server
+    networks:
+      - app-network
+
+  ai-hr-gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        BASE_JAVA_IMAGE: ${BASE_JAVA_IMAGE:-eclipse-temurin:17-jre}
+        JAR_FILE: ai-hr-gateway/target/ai-hr-gateway-0.1.0-SNAPSHOT.jar
+    environment:
+      SPRING_CONFIG_IMPORT: optional:configserver:http://ai-hr-config-server:8888
+      SPRING_CLOUD_CONFIG_URI: http://ai-hr-config-server:8888
+      AIHR_EUREKA_URL: http://ai-hr-eureka-server:8761/eureka/
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://ai-hr-eureka-server:8761/eureka/
+      AIHR_MYSQL_HOST: ${AIHR_MYSQL_HOST:-mysql}
+      AIHR_MYSQL_PORT: ${AIHR_MYSQL_PORT:-3306}
+      AIHR_MYSQL_USER: ${AIHR_MYSQL_USER:-root}
+      AIHR_MYSQL_PASSWORD: ${AIHR_MYSQL_PASSWORD:-root}
+      AIHR_REDIS_HOST: ${AIHR_REDIS_HOST:-redis}
+      AIHR_REDIS_PASSWORD: ${AIHR_REDIS_PASSWORD:-redis}
+      AIHR_ROCKETMQ_NAMESRV: ${AIHR_ROCKETMQ_NAMESRV:-rocketmq-namesrv:9876}
+    ports:
+      - "9100:9100"
+    restart: on-failure
+    depends_on:
+      - ai-hr-config-server
+      - ai-hr-auth
+      - ai-hr-attendance
+      - ai-hr-salary
+      - ai-hr-ai-core
+    networks:
+      - app-network
+
+networks:
+  app-network:
+    name: app-network
+    external: true

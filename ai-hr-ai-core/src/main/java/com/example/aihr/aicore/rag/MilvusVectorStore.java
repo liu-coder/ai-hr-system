@@ -18,33 +18,28 @@ import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
 import org.springframework.stereotype.Component;
 import com.example.aihr.common.exception.AiHrBusinessException;
-import com.example.aihr.common.web.ApiError.ErrorCode;
+import com.example.aihr.common.web.ApiError;
 
 @Component
 public class MilvusVectorStore implements VectorStore {
     private final MilvusClientV2 client;
-    private final EmbeddingService embeddingService;
-    private final io.milvus.v2.client.ConnectConfig connectConfig;
     private final com.example.aihr.aicore.milvus.MilvusProperties props;
     private final AtomicBoolean ensured = new AtomicBoolean(false);
 
     public MilvusVectorStore(MilvusClientV2 client,
-                             com.example.aihr.aicore.milvus.MilvusProperties props,
-                             EmbeddingService embeddingService) {
+                             com.example.aihr.aicore.milvus.MilvusProperties props) {
         this.client = client;
         this.props = props;
-        this.embeddingService = embeddingService;
-        this.connectConfig = null;
     }
 
     @Override
     public void upsert(String tenantId, String chunkId, List<Float> vector) {
         // P0: 参数验证
         if (!isValidTenantId(tenantId)) {
-            throw new AiHrBusinessException(ErrorCode.PARAM_INVALID_ARGUMENT, "无效的租户 ID 格式");
+            throw new AiHrBusinessException(ApiError.ErrorCode.PARAM_INVALID_ARGUMENT, "无效的租户 ID 格式");
         }
         if (chunkId == null || chunkId.isBlank()) {
-            throw new AiHrBusinessException(ErrorCode.PARAM_INVALID_ARGUMENT, "chunkId 不能为空");
+            throw new AiHrBusinessException(ApiError.ErrorCode.PARAM_INVALID_ARGUMENT, "chunkId 不能为空");
         }
         ensureCollection();
         JsonObject row = new JsonObject();
@@ -66,7 +61,7 @@ public class MilvusVectorStore implements VectorStore {
     public List<String> search(String tenantId, List<Float> queryVector, int topK) {
         // P0: 参数验证（防止 SQL 注入）
         if (!isValidTenantId(tenantId)) {
-            throw new AiHrBusinessException(ErrorCode.PARAM_INVALID_ARGUMENT, "无效的租户 ID 格式");
+            throw new AiHrBusinessException(ApiError.ErrorCode.PARAM_INVALID_ARGUMENT, "无效的租户 ID 格式");
         }
         
         ensureCollection();
@@ -198,9 +193,9 @@ public class MilvusVectorStore implements VectorStore {
         return null;
     }
 
-    private String escape(String s) {
-        if (s == null) return "";
-        return s.replace("\\", "\\\\").replace("\"", "\\\"");
-    }
+
 }
+
+
+
 

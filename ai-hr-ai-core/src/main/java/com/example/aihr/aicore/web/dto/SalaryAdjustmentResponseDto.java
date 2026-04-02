@@ -37,3 +37,6 @@ public class SalaryAdjustmentResponseDto {
         this.budgetImpact = budgetImpact;
     }
 }
+
+
+

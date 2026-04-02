@@ -13,3 +13,6 @@ public interface PolicyChunkRepository extends JpaRepository<PolicyChunkEntity, 
     List<PolicyChunkEntity> findByTenantIdAndDocumentId(@Param("tenantId") String tenantId, @Param("documentId") String documentId);
 }
 
+
+
+

@@ -3,12 +3,15 @@ package com.example.aihr.salary.domain;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
+import jakarta.persistence.Index;
 import jakarta.persistence.Table;
 import java.time.Instant;
 import java.time.LocalDate;
 
 @Entity
-@Table(name = "salary_policy")
+@Table(name = "salary_policy", indexes = {
+    @Index(name = "idx_tenant_status_effective", columnList = "tenant_id, status, effective_from, effective_to")
+})
 public class SalaryPolicyEntity {
     @Id
     private String id;

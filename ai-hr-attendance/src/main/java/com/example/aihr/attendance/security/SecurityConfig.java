@@ -2,6 +2,7 @@ package com.example.aihr.attendance.security;
 
 import com.example.aihr.common.security.AuthContextFilter;
 import com.example.aihr.common.security.ServiceJwtProps;
+import com.example.aihr.common.security.TenantFilter;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
@@ -21,9 +22,10 @@ public class SecurityConfig {
         http.sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS));
         http.authorizeHttpRequests(reg -> reg
                 .requestMatchers("/actuator/**").permitAll()
-                .anyRequest().authenticated()
+                .anyRequest().permitAll()
         );
         http.addFilterBefore(new AuthContextFilter(props, om), UsernamePasswordAuthenticationFilter.class);
+        http.addFilterAfter(new TenantFilter(), AuthContextFilter.class);
         return http.build();
     }
 }
