@@ -44,7 +44,7 @@ public class MilvusVectorStore implements VectorStore {
         }
         Optional<io.milvus.v2.client.MilvusClientV2> clientOpt = clientHolder.getOptional();
         if (clientOpt.isEmpty()) {
-            // Soft-fail: keep ai-core alive even if Milvus is temporarily unavailable.
+            // 软失败：Milvus 暂时不可用时不影响 ai-core 继续提供服务。
             throw new AiHrBusinessException(ApiError.ErrorCode.AI_RAG_FAILED, "Milvus 不可用");
         }
         ensureCollection();
@@ -73,7 +73,7 @@ public class MilvusVectorStore implements VectorStore {
         
         Optional<io.milvus.v2.client.MilvusClientV2> clientOpt = clientHolder.getOptional();
         if (clientOpt.isEmpty()) {
-            // Degrade to empty result; upstream will fallback to keyword search.
+            // 降级为空结果，由上层走关键词回退逻辑。
             return List.of();
         }
         ensureCollection();

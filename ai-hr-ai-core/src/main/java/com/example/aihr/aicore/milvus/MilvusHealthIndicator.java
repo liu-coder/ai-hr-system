@@ -22,7 +22,7 @@ public class MilvusHealthIndicator implements HealthIndicator {
             // Lightweight call; validates connectivity.
             Optional<io.milvus.v2.client.MilvusClientV2> clientOpt = clientHolder.getOptional();
             if (clientOpt.isEmpty()) {
-                // Report DOWN but do not fail application startup.
+                // 仅标记为 DOWN，不影响应用启动。
                 return Health.down().withDetails(Map.of(
                         "uri", props.uri(),
                         "database", props.getDatabase(),

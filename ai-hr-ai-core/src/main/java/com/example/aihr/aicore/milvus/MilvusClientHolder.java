@@ -33,8 +33,8 @@ public class MilvusClientHolder {
             }
             initTried.set(true);
             try {
-                // Lazy init: only connect when the vector store is actually used.
-                // If Milvus is down, we fail closed and keep ai-core running.
+                // 懒加载：只有在真正用到向量存储时才尝试连接。
+                // 连接失败时保持服务继续运行，避免拖垮 ai-core 启动。
                 ConnectConfig cfg = ConnectConfig.builder()
                         .uri(props.uri())
                         .dbName(props.getDatabase())

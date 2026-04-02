@@ -6,9 +6,8 @@ import org.springframework.context.annotation.Configuration;
 @Configuration
 @EnableConfigurationProperties(MilvusProperties.class)
 public class MilvusConfig {
-    // Intentionally no MilvusClientV2 bean here.
-    // We avoid a hard startup dependency on Milvus; temporary Milvus outages
-    // should not prevent ai-core from booting and serving chat requests.
+    // 这里不再直接创建 MilvusClientV2 Bean。
+    // 目的：避免 Milvus 短暂不可用时阻断 ai-core 启动与聊天服务可用性。
 }
 
 
