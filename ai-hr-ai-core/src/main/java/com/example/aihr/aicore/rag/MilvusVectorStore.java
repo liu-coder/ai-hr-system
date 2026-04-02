@@ -1,6 +1,5 @@
 package com.example.aihr.aicore.rag;
 
-import io.milvus.v2.client.MilvusClientV2;
 import io.milvus.v2.common.DataType;
 import io.milvus.v2.common.IndexParam;
 import io.milvus.v2.service.collection.request.CreateCollectionReq;
@@ -15,20 +14,22 @@ import com.google.gson.JsonObject;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.atomic.AtomicBoolean;
 import org.springframework.stereotype.Component;
 import com.example.aihr.common.exception.AiHrBusinessException;
 import com.example.aihr.common.web.ApiError;
+import com.example.aihr.aicore.milvus.MilvusClientHolder;
 
 @Component
 public class MilvusVectorStore implements VectorStore {
-    private final MilvusClientV2 client;
+    private final MilvusClientHolder clientHolder;
     private final com.example.aihr.aicore.milvus.MilvusProperties props;
     private final AtomicBoolean ensured = new AtomicBoolean(false);
 
-    public MilvusVectorStore(MilvusClientV2 client,
+    public MilvusVectorStore(MilvusClientHolder clientHolder,
                              com.example.aihr.aicore.milvus.MilvusProperties props) {
-        this.client = client;
+        this.clientHolder = clientHolder;
         this.props = props;
     }
 
@@ -41,7 +42,13 @@ public class MilvusVectorStore implements VectorStore {
         if (chunkId == null || chunkId.isBlank()) {
             throw new AiHrBusinessException(ApiError.ErrorCode.PARAM_INVALID_ARGUMENT, "chunkId 不能为空");
         }
+        Optional<io.milvus.v2.client.MilvusClientV2> clientOpt = clientHolder.getOptional();
+        if (clientOpt.isEmpty()) {
+            // Soft-fail: keep ai-core alive even if Milvus is temporarily unavailable.
+            throw new AiHrBusinessException(ApiError.ErrorCode.AI_RAG_FAILED, "Milvus 不可用");
+        }
         ensureCollection();
+        io.milvus.v2.client.MilvusClientV2 client = clientOpt.get();
         JsonObject row = new JsonObject();
         row.addProperty("chunkId", chunkId);
         row.addProperty("tenantId", tenantId);
@@ -64,7 +71,13 @@ public class MilvusVectorStore implements VectorStore {
             throw new AiHrBusinessException(ApiError.ErrorCode.PARAM_INVALID_ARGUMENT, "无效的租户 ID 格式");
         }
         
+        Optional<io.milvus.v2.client.MilvusClientV2> clientOpt = clientHolder.getOptional();
+        if (clientOpt.isEmpty()) {
+            // Degrade to empty result; upstream will fallback to keyword search.
+            return List.of();
+        }
         ensureCollection();
+        io.milvus.v2.client.MilvusClientV2 client = clientOpt.get();
 
         FloatVec q = new FloatVec(queryVector);
         
@@ -89,7 +102,11 @@ public class MilvusVectorStore implements VectorStore {
     @Override
     public boolean isAvailable() {
         try {
-            client.listCollections();
+            Optional<io.milvus.v2.client.MilvusClientV2> clientOpt = clientHolder.getOptional();
+            if (clientOpt.isEmpty()) {
+                return false;
+            }
+            clientOpt.get().listCollections();
             return true;
         } catch (Exception e) {
             return false;
@@ -101,7 +118,11 @@ public class MilvusVectorStore implements VectorStore {
         synchronized (ensured) {
             if (ensured.get()) return;
             if (!isAvailable()) return;
-
+            Optional<io.milvus.v2.client.MilvusClientV2> clientOpt = clientHolder.getOptional();
+            if (clientOpt.isEmpty()) {
+                return;
+            }
+            io.milvus.v2.client.MilvusClientV2 client = clientOpt.get();
             Boolean exists = client.hasCollection(HasCollectionReq.builder()
                     .databaseName(props.getDatabase())
                     .collectionName(props.getCollection())

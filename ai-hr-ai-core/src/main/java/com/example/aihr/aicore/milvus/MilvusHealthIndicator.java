@@ -1,18 +1,18 @@
 package com.example.aihr.aicore.milvus;
 
-import io.milvus.v2.client.MilvusClientV2;
 import java.util.Map;
+import java.util.Optional;
 import org.springframework.boot.actuate.health.Health;
 import org.springframework.boot.actuate.health.HealthIndicator;
 import org.springframework.stereotype.Component;
 
 @Component
 public class MilvusHealthIndicator implements HealthIndicator {
-    private final MilvusClientV2 client;
+    private final MilvusClientHolder clientHolder;
     private final MilvusProperties props;
 
-    public MilvusHealthIndicator(MilvusClientV2 client, MilvusProperties props) {
-        this.client = client;
+    public MilvusHealthIndicator(MilvusClientHolder clientHolder, MilvusProperties props) {
+        this.clientHolder = clientHolder;
         this.props = props;
     }
 
@@ -20,7 +20,17 @@ public class MilvusHealthIndicator implements HealthIndicator {
     public Health health() {
         try {
             // Lightweight call; validates connectivity.
-            client.listCollections();
+            Optional<io.milvus.v2.client.MilvusClientV2> clientOpt = clientHolder.getOptional();
+            if (clientOpt.isEmpty()) {
+                // Report DOWN but do not fail application startup.
+                return Health.down().withDetails(Map.of(
+                        "uri", props.uri(),
+                        "database", props.getDatabase(),
+                        "collection", props.getCollection(),
+                        "reason", "Milvus client unavailable"
+                )).build();
+            }
+            clientOpt.get().listCollections();
             return Health.up().withDetails(Map.of(
                     "uri", props.uri(),
                     "database", props.getDatabase(),
