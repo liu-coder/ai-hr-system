@@ -1,0 +1,42 @@
+# RocketMQ：E:\workspace\docker\docker-compose.base.yml 未包含，与同目录 docker-compose.yml 中定义一致。
+# 数据目录使用 workspace 下固定路径，与现有 docker 数据卷共用。
+# 前置：已存在外部网络 app-network（由 workspace 的 base 或其它 compose 创建）。
+
+services:
+  rocketmq-namesrv:
+    image: apache/rocketmq:5.3.2
+    container_name: rocketmq-namesrv
+    networks:
+      - app-network
+    command: sh mqnamesrv
+    ports:
+      - "9876:9876"
+    volumes:
+      - E:/workspace/docker/data/rocketmq/namesrv/logs:/home/rocketmq/logs
+    restart: unless-stopped
+
+  rocketmq-broker:
+    image: apache/rocketmq:5.3.2
+    container_name: rocketmq-broker
+    networks:
+      - app-network
+    command: sh mqbroker -c /home/rocketmq/broker.conf --enable-proxy
+    ports:
+      - "10911:10911"
+      - "10912:10912"
+      - "10909:10909"
+      - "8081:8081"
+    environment:
+      - NAMESRV_ADDR=rocketmq-namesrv:9876
+    depends_on:
+      - rocketmq-namesrv
+    volumes:
+      - E:/workspace/docker/data/rocketmq/broker/logs:/home/rocketmq/logs
+      - E:/workspace/docker/data/rocketmq/broker/store:/home/rocketmq/store
+      - E:/workspace/docker/data/rocketmq/broker/broker.conf:/home/rocketmq/broker.conf
+    restart: unless-stopped
+
+networks:
+  app-network:
+    name: app-network
+    external: true

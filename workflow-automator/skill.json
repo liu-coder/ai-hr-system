@@ -1,0 +1,82 @@
+{
+  "name": "workflow-automator",
+  "description": "流程编排自动化工具，根据需求类型自动选择工业级或轻量流程，并按顺序执行相关技能",
+  "author": "Trae Team",
+  "version": "1.1.0",
+  "tags": ["workflow", "automation", "orchestration"],
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "requirement_description": {
+        "type": "string",
+        "description": "需求描述"
+      }
+    },
+    "required": ["requirement_description"]
+  },
+  "output_schema": {
+    "type": "object",
+    "properties": {
+      "workflow_id": {
+        "type": "string",
+        "description": "流程ID"
+      },
+      "workflow_type": {
+        "type": "string",
+        "description": "流程类型：industrial（工业级）或 lightweight（轻量）"
+      },
+      "steps_executed": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "step_id": {
+              "type": "string",
+              "description": "步骤ID"
+            },
+            "step_name": {
+              "type": "string",
+              "description": "步骤名称"
+            },
+            "skill_name": {
+              "type": "string",
+              "description": "执行的技能名称"
+            },
+            "status": {
+              "type": "string",
+              "description": "执行状态：success 或 failed"
+            },
+            "result": {
+              "type": "object",
+              "description": "执行结果"
+            }
+          }
+        }
+      },
+      "overall_status": {
+        "type": "string",
+        "description": "整体执行状态：success 或 failed"
+      }
+    }
+  },
+  "execution": {
+    "type": "python",
+    "entry_point": "run.py"
+  },
+  "scopes": [
+    "project",
+    "global"
+  ],
+  "auto_trigger": {
+    "enabled": true,
+    "trigger_patterns": [
+      "开发",
+      "修复",
+      "需求",
+      "功能",
+      "bug",
+      "优化"
+    ],
+    "priority": "high"
+  }
+}
