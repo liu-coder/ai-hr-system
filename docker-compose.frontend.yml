@@ -1,0 +1,22 @@
+# 前端：基镜像见 docker/base-images.env 中 NODE_IMAGE；与网关在同一 app-network。
+# VITE_API_PROXY_TARGET 默认同网段服务名 ai-hr-gateway:9100。
+
+services:
+  ai-hr-web:
+    build:
+      context: ./ai-hr-web
+      dockerfile: Dockerfile.dev
+      args:
+        NODE_IMAGE: ${NODE_IMAGE:-node:20-alpine}
+    environment:
+      VITE_API_PROXY_TARGET: ${VITE_API_PROXY_TARGET:-http://ai-hr-gateway:9100}
+    ports:
+      - "5173:5173"
+    restart: unless-stopped
+    networks:
+      - app-network
+
+networks:
+  app-network:
+    name: app-network
+    external: true
